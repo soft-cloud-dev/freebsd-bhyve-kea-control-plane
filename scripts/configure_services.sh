@@ -101,11 +101,8 @@ persist;
 exec.start = "/bin/sh -c 'exit 0'";
 exec.stop = "/bin/sh -c 'exit 0'";
 exec.clean;
-exec.system_jail_user;
-exec.system_exec_subsystem;
-mount.devfs;
 host.hostname = "\$name.control-plane.local";
-path = "/usr/local/jails/\$name";
+path = "/";
 
 postgres {
     ip4.addr = 127.0.0.1;

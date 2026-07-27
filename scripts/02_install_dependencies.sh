@@ -12,9 +12,13 @@ pkg update -f || true
 pkg install -y \
     ca_root_nss \
     curl \
+    grafana \
     jq \
+    kea \
+    node_exporter \
     postgresql16-client \
     postgresql16-server \
+    prometheus \
     py312-cloud-init \
     sudo \
     tmux \

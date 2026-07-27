@@ -34,12 +34,12 @@ elif ! command -v container >/dev/null 2>&1 || command -v jail >/dev/null 2>&1; 
         kea_service=""
     fi
     [ -z "$kea_service" ] || service "$kea_service" restart 2>/dev/null || service "$kea_service" start 2>/dev/null || true
-    service node_exporter restart 2>/dev/null || service node_exporter start 2>/dev/null || true
-    service prometheus restart 2>/dev/null || service prometheus start 2>/dev/null || true
-    if [ "$(sysrc -n postgres_exporter_enable 2>/dev/null || true)" = YES ]; then
+    [ ! -x /usr/local/etc/rc.d/node_exporter ] || service node_exporter restart 2>/dev/null || service node_exporter start 2>/dev/null || true
+    [ ! -x /usr/local/etc/rc.d/prometheus ] || service prometheus restart 2>/dev/null || service prometheus start 2>/dev/null || true
+    if [ "$(sysrc -n postgres_exporter_enable 2>/dev/null || true)" = YES ] && [ -x /usr/local/etc/rc.d/postgres_exporter ]; then
         service postgres_exporter restart 2>/dev/null || service postgres_exporter start 2>/dev/null || true
     fi
-    service grafana restart 2>/dev/null || service grafana start 2>/dev/null || true
+    [ ! -x /usr/local/etc/rc.d/grafana ] || service grafana restart 2>/dev/null || service grafana start 2>/dev/null || true
 fi
 
 user=$(sed -n '1p' "${KEA_API_USER_FILE}")
