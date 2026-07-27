@@ -16,7 +16,7 @@ Prometheus and both exporters bind to loopback. Grafana is the only component ex
 
 ```sh
 install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml
-install -m 0640 config/grafana.ini /usr/local/etc/grafana/grafana.ini
+install -m 0644 config/grafana.ini /usr/local/etc/grafana/grafana.ini
 install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources
 install -d -m 0755 /usr/local/etc/grafana/provisioning/dashboards/json
 install -m 0644 config/grafana/provisioning/datasources/prometheus.yml \

@@ -86,7 +86,7 @@ install -m 0600 config/pf.conf /etc/pf.conf
 install -m 0644 config/kea-dhcp4.conf /usr/local/etc/kea/kea-dhcp4.conf
 install -m 0644 config/kea-ctrl-agent.conf /usr/local/etc/kea/kea-ctrl-agent.conf
 install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml
-install -m 0640 config/grafana.ini /usr/local/etc/grafana/grafana.ini
+install -m 0644 config/grafana.ini /usr/local/etc/grafana/grafana.ini
 pfctl -nf /etc/pf.conf
 kea-dhcp4 -t /usr/local/etc/kea/kea-dhcp4.conf
 kea-ctrl-agent -t /usr/local/etc/kea/kea-ctrl-agent.conf

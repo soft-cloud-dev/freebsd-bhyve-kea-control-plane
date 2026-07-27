@@ -94,9 +94,10 @@ configure-services:
 	kea-dhcp4 -t "$$kea_tmp"; install -m 0640 "$$kea_tmp" /usr/local/etc/kea/kea-dhcp4.conf; \
 	install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml; \
 	if command -v promtool >/dev/null 2>&1; then promtool check config /usr/local/etc/prometheus.yml; fi; \
-	install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources /usr/local/etc/grafana/provisioning/dashboards/json; \
+	install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources /usr/local/etc/grafana/provisioning/dashboards/json /var/db/grafana /var/db/grafana/plugins /var/log/grafana; \
+	if id grafana >/dev/null 2>&1; then chown -R grafana:grafana /var/db/grafana /var/log/grafana; fi; \
 	sed 's|^http_addr[[:space:]]*=.*|http_addr = ${MGMT_ADDR}|' config/grafana.ini > "$$grafana_tmp"; \
-	install -m 0640 "$$grafana_tmp" /usr/local/etc/grafana/grafana.ini; \
+	install -m 0644 "$$grafana_tmp" /usr/local/etc/grafana/grafana.ini; \
 	install -m 0644 config/grafana/provisioning/datasources/prometheus.yml /usr/local/etc/grafana/provisioning/datasources/prometheus.yml; \
 	install -m 0644 config/grafana/provisioning/dashboards/default.yml /usr/local/etc/grafana/provisioning/dashboards/default.yml; \
 	for dashboard in config/grafana/provisioning/dashboards/json/*.json; do [ -e "$$dashboard" ] || continue; install -m 0644 "$$dashboard" /usr/local/etc/grafana/provisioning/dashboards/json/; done; \
@@ -114,7 +115,8 @@ configure-services:
 	sysrc -x kea_ctrl_agent_enable >/dev/null 2>&1 || true; \
 	sysrc prometheus_enable=YES prometheus_config=/usr/local/etc/prometheus.yml prometheus_args='--web.listen-address=127.0.0.1:9090' >/dev/null; \
 	sysrc node_exporter_enable=YES node_exporter_listen_address=127.0.0.1:9100 >/dev/null; \
-	sysrc grafana_enable=YES grafana_config=/usr/local/etc/grafana/grafana.ini grafana_homepath=/usr/local/share/grafana >/dev/null; \
+	if [ -d /usr/local/share/grafana ]; then homepath=/usr/local/share/grafana; elif [ -d /usr/local/share/grafana-server ]; then homepath=/usr/local/share/grafana-server; else homepath=/usr/local/share/grafana; fi; \
+	sysrc grafana_enable=YES grafana_config=/usr/local/etc/grafana/grafana.ini grafana_homepath="$$homepath" >/dev/null; \
 	if [ -n "${POSTGRES_EXPORTER_DSN}" ]; then \
 	  install -d -m 0700 /etc/rc.conf.d; umask 077; \
 	  printf '%s\n' 'postgres_exporter_enable="YES"' 'postgres_exporter_listen_address="127.0.0.1:9187"' 'postgres_exporter_env="DATA_SOURCE_URI=${POSTGRES_EXPORTER_DSN}"' > /etc/rc.conf.d/postgres_exporter; \
