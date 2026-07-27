@@ -9,6 +9,8 @@ su -
 sh scripts/02_install_dependencies.sh
 ```
 
+The provisioner uses FreeBSD base `makefs` to create NoCloud seed ISOs. If `makefs` is unavailable, install `cdrtools` to provide `genisoimage` as a fallback.
+
 ## 2. Establish host trust and storage
 
 Install a trusted SSH public key for the management account before disabling password authentication.
@@ -53,18 +55,33 @@ SQL
 
 Configure local PostgreSQL authentication for a dedicated provisioning role before production use.
 
-## 5. Initialize vm-bhyve
+## 5. Prepare a cloud image
+
+Use a guest image that includes cloud-init and has the NoCloud datasource enabled. The image must support reading a CD-ROM labelled `cidata`.
+
+Keep the trusted management public key on the host, for example:
+
+```sh
+install -d -m 0700 /root/.ssh
+install -m 0600 /path/to/id_ed25519.pub /root/.ssh/bhyve-admin.pub
+```
+
+The provisioner rejects non-Ed25519 public keys.
+
+## 6. Initialize vm-bhyve
 
 Copy and adapt the example template:
 
 ```sh
-install -m 0644 templates/vm-bhyve.conf /zroot/vm/.templates/freebsd.conf
 vm init
+install -m 0644 templates/vm-bhyve.conf /zroot/vm/.templates/freebsd.conf
 ```
+
+The template attaches `seed.iso` as `disk1` using `ahci-cd`. The provisioner creates that ISO inside each guest directory before the first boot.
 
 Create the required vm-bhyve switch and confirm that it maps to the intended bridge.
 
-## 6. Start services
+## 7. Start services
 
 ```sh
 service pf start
@@ -72,7 +89,7 @@ service kea_dhcp4 start
 service kea_ctrl_agent start
 ```
 
-## 7. Validate
+## 8. Validate
 
 ```sh
 make validate-freebsd
