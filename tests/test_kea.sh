@@ -4,6 +4,8 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DHCP4_CONF="${KEA_DHCP4_CONF:-${ROOT}/config/kea-dhcp4.conf}"
 KEA_API_URL="${KEA_API_URL:-http://127.0.0.1:8000/}"
+KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
+KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 
 if ! command -v kea-dhcp4 >/dev/null 2>&1; then
     echo "SKIP: kea-dhcp4 is not installed" >&2
@@ -15,12 +17,24 @@ grep -q '"socket-type"[[:space:]]*:[[:space:]]*"http"' "$DHCP4_CONF"
 grep -q '"socket-address"[[:space:]]*:[[:space:]]*"127.0.0.1"' "$DHCP4_CONF"
 grep -q '"socket-port"[[:space:]]*:[[:space:]]*8000' "$DHCP4_CONF"
 
-if service kea_dhcp4 status >/dev/null 2>&1; then
-    response=$(curl -fsS -H 'Content-Type: application/json' \
+if sockstat -4 -l 2>/dev/null | awk '$6 == "127.0.0.1:8000" { found=1 } END { exit !found }'; then
+    [ -s "$KEA_API_USER_FILE" ] || {
+        echo "ERROR: missing Kea API user file: $KEA_API_USER_FILE" >&2
+        exit 1
+    }
+    [ -s "$KEA_API_PASSWORD_FILE" ] || {
+        echo "ERROR: missing Kea API password file: $KEA_API_PASSWORD_FILE" >&2
+        exit 1
+    }
+
+    user=$(sed -n '1p' "$KEA_API_USER_FILE")
+    password=$(sed -n '1p' "$KEA_API_PASSWORD_FILE")
+    response=$(curl -fsS --user "$user:$password" \
+        -H 'Content-Type: application/json' \
         -d '{"command":"status-get"}' "$KEA_API_URL")
     printf '%s' "$response" | jq -e '.[0].result == 0' >/dev/null
 else
-    echo "SKIP: kea_dhcp4 is not running; API readiness not tested" >&2
+    echo "SKIP: Kea API is not listening on 127.0.0.1:8000" >&2
 fi
 
-echo "PASS: Kea DHCP4 configuration and direct API"
+echo "PASS: Kea DHCP4 configuration and authenticated direct API"
