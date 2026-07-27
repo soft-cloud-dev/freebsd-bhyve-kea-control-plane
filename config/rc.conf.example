@@ -1,0 +1,20 @@
+hostname="bhyve01.example.net"
+
+zfs_enable="YES"
+sshd_enable="YES"
+blacklistd_enable="YES"
+pf_enable="YES"
+pf_rules="/etc/pf.conf"
+pflog_enable="YES"
+
+vm_enable="YES"
+vm_dir="zfs:zroot/vm"
+
+postgresql_enable="YES"
+kea_dhcp4_enable="YES"
+kea_ctrl_agent_enable="YES"
+
+# Example physical and bridge configuration; replace interface names and addresses.
+cloned_interfaces="bridge0 vlan10"
+ifconfig_vlan10="inet 10.0.10.2/24 vlan 10 vlandev igb0"
+ifconfig_bridge0="inet 10.0.20.1/24 addm igb1 up"
