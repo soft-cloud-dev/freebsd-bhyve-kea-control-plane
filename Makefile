@@ -19,6 +19,9 @@ IPAM_FIRST_HOST ?= 10.0.20.10
 IPAM_LAST_HOST ?= 10.0.20.99
 IPAM_VLAN ?= 20
 KEA_SUBNET_ID ?= 1
+KEA_API_USER ?= control-plane
+KEA_API_USER_FILE ?= /usr/local/etc/kea/kea-api-user
+KEA_API_PASSWORD_FILE ?= /usr/local/etc/kea/kea-api-password
 POSTGRES_EXPORTER_DSN ?=
 
 SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/provision_vm.sh scripts/rollback_vm.sh
@@ -72,9 +75,12 @@ configure-services:
 	    -e 's|^mgmt_net[[:space:]]*=.*|mgmt_net = "${MGMT_NET}"|' \
 	    -e 's|^lan_net[[:space:]]*=.*|lan_net = "${LAN_NET}"|' config/pf.conf > "$$pf_tmp"; \
 	pfctl -nf "$$pf_tmp"; install -m 0600 "$$pf_tmp" /etc/pf.conf; \
-	install -d -m 0755 /usr/local/etc/kea; \
+	install -d -m 0750 /usr/local/etc/kea; \
+	if [ ! -s "${KEA_API_USER_FILE}" ]; then printf '%s\n' "${KEA_API_USER}" > "${KEA_API_USER_FILE}"; fi; \
+	if [ ! -s "${KEA_API_PASSWORD_FILE}" ]; then umask 077; openssl rand -hex 24 > "${KEA_API_PASSWORD_FILE}"; fi; \
+	chmod 0600 "${KEA_API_USER_FILE}" "${KEA_API_PASSWORD_FILE}"; \
 	sed 's|"interfaces": \[ "[^"]*" \]|"interfaces": [ "${LAN_IF}" ]|' config/kea-dhcp4.conf > "$$kea_tmp"; \
-	kea-dhcp4 -t "$$kea_tmp"; install -m 0644 "$$kea_tmp" /usr/local/etc/kea/kea-dhcp4.conf; \
+	kea-dhcp4 -t "$$kea_tmp"; install -m 0640 "$$kea_tmp" /usr/local/etc/kea/kea-dhcp4.conf; \
 	install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml; \
 	if command -v promtool >/dev/null 2>&1; then promtool check config /usr/local/etc/prometheus.yml; fi; \
 	install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources /usr/local/etc/grafana/provisioning/dashboards/json; \
@@ -119,7 +125,8 @@ start-services:
 	@service prometheus restart 2>/dev/null || service prometheus start
 	@if [ "$$(sysrc -n postgres_exporter_enable 2>/dev/null || true)" = YES ]; then service postgres_exporter restart 2>/dev/null || service postgres_exporter start; fi
 	@service grafana restart 2>/dev/null || service grafana start
-	@i=0; until fetch -qo- http://127.0.0.1:8000/ >/dev/null 2>&1 || [ $$i -ge 15 ]; do i=$$((i+1)); sleep 1; done
+	@set -eu; user=$$(sed -n '1p' "${KEA_API_USER_FILE}"); password=$$(sed -n '1p' "${KEA_API_PASSWORD_FILE}"); \
+	i=0; until curl -fsS --user "$$user:$$password" -H 'Content-Type: application/json' -d '{"command":"status-get"}' http://127.0.0.1:8000/ >/dev/null; do i=$$((i+1)); [ $$i -lt 15 ] || { echo 'ERROR: Kea API did not become ready' >&2; exit 1; }; sleep 1; done
 
 validate-freebsd: lint
 	@sh tests/test_pf.sh
