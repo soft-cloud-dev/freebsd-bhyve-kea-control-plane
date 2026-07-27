@@ -5,8 +5,13 @@ set -eu
 require_root
 
 PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT:-120}"
+LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT:-60}"
 KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
+
+case "$LOKI_READY_TIMEOUT" in
+    ''|*[!0-9]*|0) die "LOKI_READY_TIMEOUT must be a positive integer" ;;
+esac
 
 PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh "$(dirname "$0")/apply_pf_safely.sh" apply
 
@@ -75,12 +80,12 @@ password=$(sed -n '1p' "${KEA_API_PASSWORD_FILE}")
 i=0
 until curl -fsS http://127.0.0.1:3100/ready >/dev/null 2>&1; do
     i=$((i+1))
-    [ "$i" -lt 15 ] || {
+    [ "$i" -lt "$LOKI_READY_TIMEOUT" ] || {
         if [ -r /var/log/loki/loki.log ]; then
             echo "Last 20 lines from /var/log/loki/loki.log:" >&2
             tail -n 20 /var/log/loki/loki.log >&2
         fi
-        die "Loki did not become ready on 127.0.0.1:3100 within 15 seconds"
+        die "Loki did not become ready on 127.0.0.1:3100 within ${LOKI_READY_TIMEOUT} seconds"
     }
     sleep 1
 done

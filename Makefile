@@ -27,6 +27,7 @@ KEA_API_USER_FILE ?= /usr/local/etc/kea/kea-api-user
 KEA_API_PASSWORD_FILE ?= /usr/local/etc/kea/kea-api-password
 POSTGRES_EXPORTER_DSN ?=
 PF_ROLLBACK_TIMEOUT ?= 120
+LOKI_READY_TIMEOUT ?= 60
 
 SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/init_postgresql.sh scripts/init_vm.sh scripts/lib.sh scripts/provision_vm.sh scripts/rollback_vm.sh scripts/start_services.sh
 TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_observability.sh
@@ -86,7 +87,7 @@ init-vm:
 	@VM_DIR="${VM_DIR}" VM_DATASET="${VM_DATASET}" LAN_IF="${LAN_IF}" sh scripts/init_vm.sh
 
 start-services:
-	@PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" KEA_API_USER_FILE="${KEA_API_USER_FILE}" KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE}" sh scripts/start_services.sh
+	@PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT}" KEA_API_USER_FILE="${KEA_API_USER_FILE}" KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE}" sh scripts/start_services.sh
 
 validate-freebsd: lint
 	@sh tests/test_pf.sh

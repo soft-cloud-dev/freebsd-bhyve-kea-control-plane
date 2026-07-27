@@ -52,6 +52,8 @@ grep -Eq 'sysrc promtail_enable=YES promtail_config=/usr/local/etc/promtail\.yml
     die "Promtail rc service is not configured to use /usr/local/etc/promtail.yml"
 grep -q 'http://127\.0\.0\.1:3100/ready' "$START_SCRIPT" || \
     die "service startup does not check Loki readiness"
+grep -q 'LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT:-60}"' "$START_SCRIPT" || \
+    die "service startup does not allow enough time for Loki readiness"
 
 grep -Eq '^[[:space:]]*allow_sign_up[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$GRAFANA_CONF" || \
     die "Grafana user sign-up is not disabled"
