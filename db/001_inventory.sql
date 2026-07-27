@@ -1,6 +1,7 @@
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- PostgreSQL 16 provides gen_random_uuid() as a core function. Keeping the
+-- schema independent of pgcrypto avoids requiring the optional contrib package.
 
 DO $$
 BEGIN
