@@ -61,10 +61,11 @@ install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources \
     /var/log/grafana
 
 if id grafana >/dev/null 2>&1; then
-    chown -R grafana:grafana /var/db/grafana /var/log/grafana
+    chown -R grafana:grafana /var/db/grafana /var/log/grafana /usr/local/etc/grafana
 fi
 
 sed "s|^http_addr[[:space:]]*=.*|http_addr = ${MGMT_ADDR}|" config/grafana.ini > "$grafana_tmp"
+install -m 0644 "$grafana_tmp" /usr/local/etc/grafana.ini
 install -m 0644 "$grafana_tmp" /usr/local/etc/grafana/grafana.ini
 
 install -m 0644 config/grafana/provisioning/datasources/prometheus.yml /usr/local/etc/grafana/provisioning/datasources/prometheus.yml

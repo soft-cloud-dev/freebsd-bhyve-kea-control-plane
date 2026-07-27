@@ -76,6 +76,7 @@ if (command -v service >/dev/null 2>&1 && [ -x /usr/local/etc/rc.d/grafana ]) ||
         fi
         sleep 1
     done
+    [ "$ready" -eq 1 ] || die "Grafana health check failed on $GRAFANA_HEALTH_URL"
 fi
 
 echo "PASS: observability configuration"
