@@ -26,8 +26,9 @@ KEA_API_USER ?= control-plane
 KEA_API_USER_FILE ?= /usr/local/etc/kea/kea-api-user
 KEA_API_PASSWORD_FILE ?= /usr/local/etc/kea/kea-api-password
 POSTGRES_EXPORTER_DSN ?=
+PF_ROLLBACK_TIMEOUT ?= 120
 
-SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/provision_vm.sh scripts/rollback_vm.sh
+SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/provision_vm.sh scripts/rollback_vm.sh
 TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_observability.sh tests/test_provisioner.sh
 
 .NOTPARALLEL:
@@ -62,6 +63,7 @@ check-trust:
 	@test -n "${SSH_ADMIN_KEY_FILE}${SSH_ADMIN_AUTHORIZED_KEY}" || { echo "ERROR: set SSH_ADMIN_KEY_FILE or SSH_ADMIN_AUTHORIZED_KEY" >&2; exit 1; }
 
 install: check-root check-platform check-trust syntax install-dependencies configure-host configure-services init-postgresql init-ipam init-vm start-services validate-freebsd
+	@PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh scripts/apply_pf_safely.sh confirm
 	@echo "[+] Installation completed"
 	@echo "[+] SSH login: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
 
@@ -80,7 +82,10 @@ configure-services:
 	    -e 's|^lan_if[[:space:]]*=.*|lan_if = "${LAN_IF}"|' \
 	    -e 's|^mgmt_net[[:space:]]*=.*|mgmt_net = "${MGMT_NET}"|' \
 	    -e 's|^lan_net[[:space:]]*=.*|lan_net = "${LAN_NET}"|' config/pf.conf > "$$pf_tmp"; \
-	pfctl -nf "$$pf_tmp"; install -m 0600 "$$pf_tmp" /etc/pf.conf; \
+	pfctl -nf "$$pf_tmp"; \
+	install -d -m 0755 /var/backups; \
+	if [ -f /etc/pf.conf ] && [ ! -f /var/backups/pf.conf.pre-control-plane ]; then install -m 0600 /etc/pf.conf /var/backups/pf.conf.pre-control-plane; fi; \
+	install -m 0600 "$$pf_tmp" /etc/pf.conf; \
 	install -d -m 0750 /usr/local/etc/kea; \
 	if [ ! -s "${KEA_API_USER_FILE}" ]; then printf '%s\n' "${KEA_API_USER}" > "${KEA_API_USER_FILE}"; fi; \
 	if [ ! -s "${KEA_API_PASSWORD_FILE}" ]; then umask 077; openssl rand -hex 24 > "${KEA_API_PASSWORD_FILE}"; fi; \
@@ -135,7 +140,7 @@ init-vm:
 	if ! vm switch list | awk 'NR > 1 {print $$1}' | grep -qx public; then vm switch create -t manual -b "${LAN_IF}" public; fi
 
 start-services:
-	@service pf status >/dev/null 2>&1 && service pf reload || service pf start
+	@PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh scripts/apply_pf_safely.sh apply
 	@set -eu; \
 	if [ -x /usr/local/etc/rc.d/kea ]; then \
 	  kea_service=kea; \
