@@ -183,11 +183,12 @@ created_vm=1
 
 echo "[2/7] Reading VM MAC address"
 MAC_ADDRESS=$(vm info "$VM_NAME" | awk '
-    BEGIN { IGNORECASE=1 }
-    /mac/ {
+    tolower($0) ~ /mac/ {
         for (i = 1; i <= NF; i++) {
-            if ($i ~ /^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$/) {
-                print tolower($i)
+            val = tolower($i)
+            sub(/^mac=/, "", val)
+            if (val ~ /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/) {
+                print val
                 exit
             }
         }

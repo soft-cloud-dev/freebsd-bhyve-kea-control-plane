@@ -7,6 +7,7 @@ GRAFANA_CONF="${GRAFANA_CONF:-${ROOT}/config/grafana.ini}"
 DATASOURCE_CONF="${DATASOURCE_CONF:-${ROOT}/config/grafana/provisioning/datasources/prometheus.yml}"
 DASHBOARD_PROVIDER="${DASHBOARD_PROVIDER:-${ROOT}/config/grafana/provisioning/dashboards/default.yml}"
 DASHBOARD_DIR="${DASHBOARD_DIR:-${ROOT}/config/grafana/provisioning/dashboards/json}"
+<<<<<<< HEAD
 GRAFANA_HEALTH_URL="${GRAFANA_HEALTH_URL:-http://10.0.10.2:3000/api/health}"
 
 fail() {
@@ -69,3 +70,36 @@ if command -v service >/dev/null 2>&1 && [ -x /usr/local/etc/rc.d/grafana ]; the
 fi
 
 echo "PASS: observability configuration and runtime"
+=======
+
+for file in "$PROMETHEUS_CONF" "$GRAFANA_CONF" "$DATASOURCE_CONF" "$DASHBOARD_PROVIDER"; do
+    [ -s "$file" ] || {
+        echo "ERROR: missing or empty config file: $file" >&2
+        exit 1
+    }
+done
+
+[ -d "$DASHBOARD_DIR" ] || {
+    echo "ERROR: missing dashboard directory: $DASHBOARD_DIR" >&2
+    exit 1
+}
+
+if command -v promtool >/dev/null 2>&1; then
+    promtool check config "$PROMETHEUS_CONF"
+fi
+
+if command -v jq >/dev/null 2>&1; then
+    for json_file in "$DASHBOARD_DIR"/*.json; do
+        [ -e "$json_file" ] || continue
+        jq empty "$json_file" || {
+            echo "ERROR: invalid JSON in $json_file" >&2
+            exit 1
+        }
+    done
+fi
+
+grep -q '^\[server\]' "$GRAFANA_CONF"
+grep -q 'http_port[[:space:]]*=[[:space:]]*3000' "$GRAFANA_CONF"
+
+echo "PASS: Observability configuration"
+>>>>>>> a83a865 (Fix multiple)

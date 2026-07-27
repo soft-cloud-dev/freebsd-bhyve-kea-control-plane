@@ -35,11 +35,11 @@ CREATE TABLE IF NOT EXISTS ipam_leases (
 
 CREATE TABLE IF NOT EXISTS vms (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT UNIQUE NOT NULL CHECK (name ~ '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$'),
+    name TEXT NOT NULL CHECK (name ~ '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$'),
     owner_name TEXT NOT NULL,
-    dataset TEXT UNIQUE NOT NULL,
-    mac_address MACADDR UNIQUE NOT NULL,
-    ip_address INET UNIQUE NOT NULL,
+    dataset TEXT NOT NULL,
+    mac_address MACADDR NOT NULL,
+    ip_address INET NOT NULL,
     pool_id BIGINT NOT NULL REFERENCES ipam_pools(id) ON DELETE RESTRICT,
     vlan INTEGER NOT NULL CHECK (vlan BETWEEN 1 AND 4094),
     template TEXT NOT NULL,
@@ -49,6 +49,11 @@ CREATE TABLE IF NOT EXISTS vms (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (pool_id, ip_address) REFERENCES ipam_leases(pool_id, ip_address)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS vms_active_name_idx ON vms (name) WHERE status <> 'archived';
+CREATE UNIQUE INDEX IF NOT EXISTS vms_active_dataset_idx ON vms (dataset) WHERE status <> 'archived';
+CREATE UNIQUE INDEX IF NOT EXISTS vms_active_mac_address_idx ON vms (mac_address) WHERE status <> 'archived';
+CREATE UNIQUE INDEX IF NOT EXISTS vms_active_ip_address_idx ON vms (ip_address) WHERE status <> 'archived';
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN
