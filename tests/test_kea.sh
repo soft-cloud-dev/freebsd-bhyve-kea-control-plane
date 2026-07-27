@@ -9,6 +9,11 @@ KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-passw
 
 . "${ROOT}/scripts/lib.sh"
 
+if command -v jq >/dev/null 2>&1; then
+    jq -e '(.Dhcp4["hosts-database"].type // "") != "memfile"' "$DHCP4_CONF" >/dev/null || \
+        die "memfile is a lease backend and cannot be used as a Kea hosts database"
+fi
+
 if command -v kea-dhcp4 >/dev/null 2>&1; then
     kea-dhcp4 -t "$DHCP4_CONF"
 elif command -v container >/dev/null 2>&1 && container_is_running kea; then
@@ -35,4 +40,3 @@ else
 fi
 
 echo "PASS: Kea DHCP4 configuration and authenticated direct API"
-
