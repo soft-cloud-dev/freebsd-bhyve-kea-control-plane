@@ -55,7 +55,8 @@ grep -q '"socket-address"[[:space:]]*:[[:space:]]*"127.0.0.1"' "$DHCP4_CONF"
 grep -q '"socket-port"[[:space:]]*:[[:space:]]*8000' "$DHCP4_CONF"
 
 if (command -v sockstat >/dev/null 2>&1 && sockstat -4 -l 2>/dev/null | awk '$6 == "127.0.0.1:8000" { found=1 } END { exit !found }') || (command -v container >/dev/null 2>&1 && container_is_running kea); then
-    if [ -s "$KEA_API_USER_FILE" ] && [ -s "$KEA_API_PASSWORD_FILE" ]; then
+    if [ -r "$KEA_API_USER_FILE" ] && [ -s "$KEA_API_USER_FILE" ] && \
+        [ -r "$KEA_API_PASSWORD_FILE" ] && [ -s "$KEA_API_PASSWORD_FILE" ]; then
         user=$(sed -n '1p' "$KEA_API_USER_FILE")
         password=$(sed -n '1p' "$KEA_API_PASSWORD_FILE")
         response=$(curl -fsS --user "$user:$password" \
