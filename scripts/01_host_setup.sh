@@ -146,11 +146,11 @@ if command -v ifconfig >/dev/null 2>&1; then
     fi
     if ! ifconfig "${MGMT_IF}" >/dev/null 2>&1; then
         echo "[*] Creating ${MGMT_IF} on ${EXT_IF} (VLAN ${MGMT_VLAN})"
-        ifconfig "${MGMT_IF}" create vlan "${MGMT_VLAN}" vlandev "${EXT_IF}" inet "${MGMT_ADDR}/24" up || true
+        ifconfig "${MGMT_IF}" create vlan "${MGMT_VLAN}" vlandev "${EXT_IF}" inet "${MGMT_ADDR}/24" mtu 1496 up || true
     fi
     if ! ifconfig "${LAN_IF}" >/dev/null 2>&1; then
         echo "[*] Creating ${LAN_IF}"
-        ifconfig "${LAN_IF}" create inet "${LAN_ADDR}/24" up || true
+        ifconfig "${LAN_IF}" create inet "${LAN_ADDR}/24" mtu 1496 up || true
     fi
 fi
 
@@ -165,8 +165,8 @@ if command -v sysrc >/dev/null 2>&1; then
                 ;;
         esac
     done
-    sysrc "ifconfig_${MGMT_IF}=inet ${MGMT_ADDR}/24 vlan ${MGMT_VLAN} vlandev ${EXT_IF}" >/dev/null 2>&1 || true
-    sysrc "ifconfig_${LAN_IF}=inet ${LAN_ADDR}/24 up" >/dev/null 2>&1 || true
+    sysrc "ifconfig_${MGMT_IF}=inet ${MGMT_ADDR}/24 vlan ${MGMT_VLAN} vlandev ${EXT_IF} mtu 1496" >/dev/null 2>&1 || true
+    sysrc "ifconfig_${LAN_IF}=inet ${LAN_ADDR}/24 mtu 1496 up" >/dev/null 2>&1 || true
 fi
 
 echo "[+] Host setup complete"

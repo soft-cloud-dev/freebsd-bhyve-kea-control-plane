@@ -120,7 +120,7 @@ prometheus {
 }
 
 grafana {
-    ip4.addr = ${MGMT_ADDR};
+    ip4.addr = ${MGMT_ADDR}, 127.0.0.1;
 }
 
 node_exporter {

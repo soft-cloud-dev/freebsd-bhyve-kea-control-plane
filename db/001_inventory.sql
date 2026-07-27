@@ -67,12 +67,14 @@ CREATE TRIGGER vms_touch_updated_at
 BEFORE UPDATE ON vms
 FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
+DROP FUNCTION IF EXISTS allocate_ip(text);
 CREATE OR REPLACE FUNCTION allocate_ip(p_pool_name TEXT) RETURNS TABLE (
     pool_id BIGINT,
     ip_address INET,
     vlan INTEGER,
     kea_subnet_id INTEGER
 ) AS $$
+#variable_conflict use_column
 DECLARE
     p ipam_pools%ROWTYPE;
     candidate INET;
@@ -108,7 +110,7 @@ BEGIN
 
     INSERT INTO ipam_leases(pool_id, ip_address)
     VALUES (p.id, candidate)
-    ON CONFLICT (pool_id, ip_address)
+    ON CONFLICT ON CONSTRAINT ipam_leases_pkey
     DO UPDATE SET allocated_at = CURRENT_TIMESTAMP, released_at = NULL;
 
     RETURN QUERY SELECT p.id, candidate, p.vlan, p.kea_subnet_id;

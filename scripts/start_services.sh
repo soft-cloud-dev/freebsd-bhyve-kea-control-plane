@@ -58,7 +58,7 @@ done
 MGMT_ADDR="${MGMT_ADDR:-10.0.10.2}"
 if [ -x /usr/local/etc/rc.d/grafana ] || (command -v container >/dev/null 2>&1 && container_is_running grafana); then
     i=0
-    until curl -fsS "http://${MGMT_ADDR}:3000/api/health" >/dev/null 2>&1 || curl -fsS "http://127.0.0.1:3000/api/health" >/dev/null 2>&1; do
+    until curl -fsS "http://${MGMT_ADDR}:3000/login" >/dev/null 2>&1 || curl -fsS "http://127.0.0.1:3000/login" >/dev/null 2>&1; do
         i=$((i+1))
         [ "$i" -lt 15 ] || {
             echo "WARNING: Grafana did not respond on port 3000 within 15 seconds" >&2

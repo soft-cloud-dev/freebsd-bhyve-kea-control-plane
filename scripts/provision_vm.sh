@@ -90,6 +90,7 @@ case "$CLOUD_INIT_USER" in
     ''|*[!a-z0-9_-]*|[0-9-]*) die "invalid cloud-init user: $CLOUD_INIT_USER" ;;
 esac
 
+require_root
 require_commands vm psql curl jq zfs mktemp
 
 [ -r "$KEA_API_USER_FILE" ] || die "missing Kea API user file: $KEA_API_USER_FILE"
@@ -133,7 +134,7 @@ rollback() {
             payload=$(jq -n \
                 --arg mac "$MAC_ADDRESS" \
                 --argjson subnet_id "$KEA_SUBNET_ID" \
-                '{command:"reservation-del",arguments:{"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
+                '{command:"reservation-del",arguments:{target:["memory"],"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
             kea_request "$payload" >/dev/null 2>&1 || true
         fi
 
@@ -249,7 +250,7 @@ payload=$(jq -n \
     --arg ip "$IP_ADDRESS" \
     --arg hostname "$VM_NAME" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
-    '{command:"reservation-add",arguments:{reservation:{"subnet-id":$subnet_id,"hw-address":$mac,"ip-address":$ip,"hostname":$hostname}}}')
+    '{command:"reservation-add",arguments:{target:["memory"],reservation:{"subnet-id":$subnet_id,"hw-address":$mac,"ip-address":$ip,"hostname":$hostname}}}')
 response=$(kea_request "$payload")
 result=$(printf '%s' "$response" | jq -er '.[0].result')
 [ "$result" -eq 0 ] || die "Kea rejected reservation: $response"

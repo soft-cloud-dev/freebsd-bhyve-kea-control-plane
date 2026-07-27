@@ -13,6 +13,7 @@ KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-passw
 }
 
 . "$(dirname "$0")/lib.sh"
+require_root
 
 [ -r "$KEA_API_USER_FILE" ] || { echo "ERROR: missing Kea API user file" >&2; exit 1; }
 [ -r "$KEA_API_PASSWORD_FILE" ] || { echo "ERROR: missing Kea API password file" >&2; exit 1; }
@@ -46,7 +47,7 @@ EOF
 payload=$(jq -n \
     --arg mac "$MAC_ADDRESS" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
-    '{command:"reservation-del",arguments:{"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
+    '{command:"reservation-del",arguments:{target:["memory"],"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
 response=$(kea_request "$payload")
 result=$(printf '%s' "$response" | jq -er '.[0].result')
 [ "$result" -eq 0 ] || {
