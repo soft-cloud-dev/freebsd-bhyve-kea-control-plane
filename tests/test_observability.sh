@@ -68,8 +68,16 @@ if command -v jq >/dev/null 2>&1; then
         found=1
         jq -e '.title and .uid and (.panels | type == "array")' "$dashboard" >/dev/null || \
             die "invalid Grafana dashboard: $dashboard"
-        grep -q 'node_network_receive_bytes_total' "$dashboard" || \
-            die "Grafana dashboard missing network metrics: $dashboard"
+        case "$dashboard" in
+            *overview*)
+                grep -q 'node_network_receive_bytes_total' "$dashboard" || \
+                    die "Grafana dashboard missing network metrics: $dashboard"
+                ;;
+            *logs*)
+                grep -q 'count_over_time' "$dashboard" || \
+                    die "Grafana log dashboard missing count_over_time queries: $dashboard"
+                ;;
+        esac
     done
     [ "$found" -eq 1 ] || die "no Grafana dashboard JSON files found"
 else
