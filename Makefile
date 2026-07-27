@@ -67,8 +67,8 @@ lint: syntax
 	fi
 
 test: lint
-	@tests/test_provisioner.sh
-	@tests/test_observability.sh
+	@sh tests/test_provisioner.sh
+	@sh tests/test_observability.sh
 
 check-root:
 	@if [ "$$(id -u)" -ne 0 ]; then \
@@ -229,7 +229,7 @@ start-services:
 	@service grafana restart 2>/dev/null || service grafana start
 
 validate-freebsd: lint
-	@tests/test_pf.sh
-	@tests/test_kea.sh
-	@tests/test_observability.sh
+	@sh tests/test_pf.sh
+	@sh tests/test_kea.sh
+	@sh tests/test_observability.sh
 	@sockstat -4 -6 -l
