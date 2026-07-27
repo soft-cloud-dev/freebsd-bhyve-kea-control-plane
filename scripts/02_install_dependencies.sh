@@ -14,6 +14,7 @@ pkg install -y \
     curl \
     jq \
     postgresql16-client \
+    postgresql16-server \
     py312-cloud-init \
     sudo \
     tmux \

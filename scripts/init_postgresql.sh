@@ -8,21 +8,24 @@ PG_USER="${PG_USER:-postgres}"
 PG_DATABASE="${PG_DATABASE:-inventory}"
 PG_DATA="${PG_DATA:-/var/db/postgres/data16}"
 
-if command -v container >/dev/null 2>&1; then
-    if ! container_is_running postgres; then
-        echo "[*] Starting PostgreSQL container..."
-        container run -d --name postgres -p 5432:5432 -v "${PG_DATA}:/var/lib/postgresql/data" postgres:16 || container start postgres || true
-    fi
-elif command -v service >/dev/null 2>&1 && [ -x /usr/local/etc/rc.d/postgresql ]; then
+if command -v service >/dev/null 2>&1 && [ -x /usr/local/etc/rc.d/postgresql ]; then
     sysrc postgresql_enable=YES >/dev/null
     if [ ! -s "${PG_DATA}/PG_VERSION" ]; then
         service postgresql initdb
     fi
     service postgresql status >/dev/null 2>&1 || service postgresql start
+elif command -v container >/dev/null 2>&1; then
+    if ! container_is_running postgres; then
+        echo "[*] Starting PostgreSQL container..."
+        container run -d --name postgres -p 5432:5432 -v "${PG_DATA}:/var/lib/postgresql/data" postgres:16 || container start postgres || true
+    fi
 fi
 
 i=0
-until (command -v pg_isready >/dev/null 2>&1 && pg_isready -h 127.0.0.1 -U "${PG_USER}" -q) || (command -v container >/dev/null 2>&1 && container exec postgres pg_isready -U "${PG_USER}" -q 2>/dev/null) || sudo -u "${PG_USER}" pg_isready -q -d postgres 2>/dev/null; do
+until (command -v pg_isready >/dev/null 2>&1 && pg_isready -q) || \
+      (command -v pg_isready >/dev/null 2>&1 && pg_isready -h 127.0.0.1 -U "${PG_USER}" -q) || \
+      (command -v container >/dev/null 2>&1 && container exec postgres pg_isready -U "${PG_USER}" -q 2>/dev/null) || \
+      sudo -u "${PG_USER}" pg_isready -q -d postgres 2>/dev/null; do
     i=$((i+1))
     [ "$i" -lt 30 ] || die "PostgreSQL did not become ready"
     sleep 1

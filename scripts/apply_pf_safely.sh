@@ -51,6 +51,10 @@ case "${MODE}" in
     apply)
         require_root
         require_commands pfctl nohup
+        if command -v kldload >/dev/null 2>&1; then
+            kldload netlink 2>/dev/null || true
+            kldload pf 2>/dev/null || true
+        fi
         [ -r "${PF_CONF}" ] || die "PF configuration is not readable: ${PF_CONF}"
         case "${PF_ROLLBACK_TIMEOUT}" in
             ''|*[!0-9]*) die "PF_ROLLBACK_TIMEOUT must be an integer" ;;

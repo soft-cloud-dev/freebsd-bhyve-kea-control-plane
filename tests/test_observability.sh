@@ -34,6 +34,12 @@ grep -Eq '^[[:space:]]*allow_sign_up[[:space:]]*=[[:space:]]*false[[:space:]]*$'
 grep -A2 '^\[auth\.anonymous\]' "$GRAFANA_CONF" | \
     grep -Eq '^[[:space:]]*enabled[[:space:]]*=[[:space:]]*false[[:space:]]*$' || \
     die "Grafana anonymous authentication is not disabled"
+grep -A3 '^\[plugins\]' "$GRAFANA_CONF" | \
+    grep -Eq '^[[:space:]]*preinstall_disabled[[:space:]]*=[[:space:]]*true[[:space:]]*$' || \
+    die "Grafana plugin preinstallation is not disabled"
+grep -A3 '^\[plugins\]' "$GRAFANA_CONF" | \
+    grep -Eq '^[[:space:]]*disable_plugins[[:space:]]*=[[:space:]]*.*elasticsearch.*$' || \
+    die "Grafana elasticsearch plugin is not disabled"
 
 grep -q 'url:[[:space:]]*http://127\.0\.0\.1:9090' "$DATASOURCE_CONF" || \
     die "Grafana datasource does not use loopback Prometheus"

@@ -5,6 +5,12 @@ set -eu
 VM_DATASET="${VM_DATASET:-zroot/vm}"
 MGMT_GROUP="${MGMT_GROUP:-wheel}"
 MGMT_USER="${MGMT_USER:-admin}"
+EXT_IF="${EXT_IF:-igb0}"
+MGMT_IF="${MGMT_IF:-vlan10}"
+LAN_IF="${LAN_IF:-bridge0}"
+MGMT_ADDR="${MGMT_ADDR:-10.0.10.2}"
+MGMT_VLAN="${MGMT_VLAN:-10}"
+LAN_ADDR="${LAN_ADDR:-10.0.20.1}"
 SSH_ADMIN_KEY_FILE="${SSH_ADMIN_KEY_FILE:-}"
 SSH_ADMIN_AUTHORIZED_KEY="${SSH_ADMIN_AUTHORIZED_KEY:-}"
 SSH_INCLUDE="/etc/ssh/sshd_config.d/99-hardening.conf"
@@ -41,17 +47,26 @@ case "${ADMIN_KEY}" in
 esac
 
 echo "[*] Configuring ZFS dataset ${VM_DATASET}"
-if ! zfs list -H -o name "${VM_DATASET}" >/dev/null 2>&1; then
-    zfs create -p "${VM_DATASET}"
+pool_name=$(echo "${VM_DATASET}" | cut -d/ -f1)
+if command -v zpool >/dev/null 2>&1 && zpool list "${pool_name}" >/dev/null 2>&1; then
+    if ! zfs list -H -o name "${VM_DATASET}" >/dev/null 2>&1; then
+        zfs create -p "${VM_DATASET}"
+    fi
+    mp=$(zfs get -H -o value mountpoint "${VM_DATASET}" 2>/dev/null || echo "")
+    if [ "$mp" = "none" ] || [ "$mp" = "legacy" ] || [ -z "$mp" ]; then
+        zfs set mountpoint=/${VM_DATASET} "${VM_DATASET}" 2>/dev/null || true
+    fi
+    zfs mount "${VM_DATASET}" 2>/dev/null || true
+    zfs set compression=lz4 "${VM_DATASET}" 2>/dev/null || true
+    zfs set atime=off "${VM_DATASET}" 2>/dev/null || true
+    if ! zfs set xattr=sa "${VM_DATASET}" 2>/dev/null; then
+        zfs set xattr=on "${VM_DATASET}" 2>/dev/null || true
+    fi
+    zfs set primarycache=metadata "${VM_DATASET}" 2>/dev/null || true
+    zfs set sync=standard "${VM_DATASET}" 2>/dev/null || true
+else
+    echo "[!] ZFS pool ${pool_name} not found; skipping ZFS dataset configuration"
 fi
-zfs set compression=lz4 "${VM_DATASET}"
-zfs set atime=off "${VM_DATASET}"
-if ! zfs set xattr=sa "${VM_DATASET}" 2>/dev/null; then
-    echo "[!] xattr=sa is unsupported; falling back to xattr=on"
-    zfs set xattr=on "${VM_DATASET}"
-fi
-zfs set primarycache=metadata "${VM_DATASET}"
-zfs set sync=standard "${VM_DATASET}"
 
 # volblocksize is a zvol creation-time property. Configure it in the
 # vm-bhyve template or create the zvol explicitly; it is not inherited.
@@ -119,6 +134,40 @@ EOF
 
 service blacklistd restart 2>/dev/null || service blacklistd start
 service sshd reload
+
+echo "[*] Configuring management interface ${MGMT_IF} and bridge ${LAN_IF}"
+if command -v kldload >/dev/null 2>&1; then
+    kldload if_vlan 2>/dev/null || true
+fi
+
+if command -v ifconfig >/dev/null 2>&1; then
+    if [ -n "${EXT_IF}" ] && ifconfig "${EXT_IF}" >/dev/null 2>&1; then
+        ifconfig "${EXT_IF}" up || true
+    fi
+    if ! ifconfig "${MGMT_IF}" >/dev/null 2>&1; then
+        echo "[*] Creating ${MGMT_IF} on ${EXT_IF} (VLAN ${MGMT_VLAN})"
+        ifconfig "${MGMT_IF}" create vlan "${MGMT_VLAN}" vlandev "${EXT_IF}" inet "${MGMT_ADDR}/24" up || true
+    fi
+    if ! ifconfig "${LAN_IF}" >/dev/null 2>&1; then
+        echo "[*] Creating ${LAN_IF}"
+        ifconfig "${LAN_IF}" create inet "${LAN_ADDR}/24" up || true
+    fi
+fi
+
+if command -v sysrc >/dev/null 2>&1; then
+    cloned=$(sysrc -n cloned_interfaces 2>/dev/null || true)
+    for iface in "${MGMT_IF}" "${LAN_IF}"; do
+        case " ${cloned} " in
+            *" ${iface} "*) ;;
+            *)
+                sysrc cloned_interfaces+="${iface}" >/dev/null 2>&1 || true
+                cloned="${cloned} ${iface}"
+                ;;
+        esac
+    done
+    sysrc "ifconfig_${MGMT_IF}=inet ${MGMT_ADDR}/24 vlan ${MGMT_VLAN} vlandev ${EXT_IF}" >/dev/null 2>&1 || true
+    sysrc "ifconfig_${LAN_IF}=inet ${LAN_ADDR}/24 up" >/dev/null 2>&1 || true
+fi
 
 echo "[+] Host setup complete"
 echo "[+] SSH login: ssh -i <private-key> ${MGMT_USER}@<management-address>"
