@@ -23,9 +23,6 @@ esac
 . "$(dirname "$0")/lib.sh"
 require_commands psql
 
-
-
-
 pool=$(sql_literal "$IPAM_POOL")
 subnet=$(sql_literal "$IPAM_SUBNET")
 first_host=$(sql_literal "$IPAM_FIRST_HOST")

@@ -61,13 +61,19 @@ else
 fi
 
 if command -v service >/dev/null 2>&1 && [ -x /usr/local/etc/rc.d/grafana ]; then
-    if service grafana status >/dev/null 2>&1; then
+    service grafana status >/dev/null 2>&1 || die "Grafana service is not running"
+
+    ready=0
+    for i in $(seq 1 15); do
         response=$(fetch -qo- "$GRAFANA_HEALTH_URL" 2>/dev/null || curl -fsS "$GRAFANA_HEALTH_URL" 2>/dev/null || true)
-        if [ -n "$response" ]; then
-            printf '%s' "$response" | jq -e '.database == "ok"' >/dev/null || \
-                die "Grafana database health is not ok"
+        if [ -n "$response" ] && printf '%s' "$response" | jq -e '.database == "ok"' >/dev/null 2>&1; then
+            ready=1
+            break
         fi
-    fi
+        sleep 1
+    done
+
+    [ "$ready" -eq 1 ] || die "Grafana database health is not ok or unreachable"
 fi
 
 echo "PASS: observability configuration"
