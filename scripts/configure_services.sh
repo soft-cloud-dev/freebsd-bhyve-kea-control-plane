@@ -44,7 +44,9 @@ fi
 chmod 0600 "${KEA_API_USER_FILE}" "${KEA_API_PASSWORD_FILE}"
 
 sed "s|\"interfaces\": \[ \"[^\"]*\" \]|\"interfaces\": [ \"${LAN_IF}\" ]|" config/kea-dhcp4.conf > "$kea_tmp"
-kea-dhcp4 -t "$kea_tmp"
+if command -v kea-dhcp4 >/dev/null 2>&1; then
+    kea-dhcp4 -t "$kea_tmp"
+fi
 install -m 0640 "$kea_tmp" /usr/local/etc/kea/kea-dhcp4.conf
 
 install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml
@@ -73,36 +75,44 @@ for dashboard in config/grafana/provisioning/dashboards/json/*.json; do
     install -m 0644 "$dashboard" /usr/local/etc/grafana/provisioning/dashboards/json/
 done
 
-sysrc pf_enable=YES pflog_enable=YES >/dev/null
+sysrc pf_enable=YES pflog_enable=YES jail_enable=YES >/dev/null
 
-if [ -x /usr/local/etc/rc.d/kea ]; then
-    sysrc kea_enable=YES >/dev/null
-    sysrc -x kea_dhcp4_enable >/dev/null 2>&1 || true
-elif [ -x /usr/local/etc/rc.d/kea_dhcp4 ]; then
-    sysrc kea_dhcp4_enable=YES >/dev/null
-    sysrc -x kea_enable >/dev/null 2>&1 || true
-else
-    echo 'ERROR: no Kea rc service found in /usr/local/etc/rc.d' >&2
-    exit 1
-fi
-sysrc -x kea_ctrl_agent_enable >/dev/null 2>&1 || true
+install -d -m 0755 /usr/local/jails
 
-sysrc prometheus_enable=YES prometheus_config=/usr/local/etc/prometheus.yml prometheus_args='--web.listen-address=127.0.0.1:9090' >/dev/null
-sysrc node_exporter_enable=YES node_exporter_listen_address=127.0.0.1:9100 >/dev/null
+cat > /etc/jail.conf <<EOF
+# Control plane FreeBSD Jails configuration
+exec.start = "/bin/sh /etc/rc";
+exec.stop = "/bin/sh /etc/rc.shutdown";
+exec.clean;
+mount.devfs;
+host.hostname = "\$name.control-plane.local";
+path = "/usr/local/jails/\$name";
 
-if [ -d /usr/local/share/grafana ]; then
-    homepath=/usr/local/share/grafana
-elif [ -d /usr/local/share/grafana-server ]; then
-    homepath=/usr/local/share/grafana-server
-else
-    homepath=/usr/local/share/grafana
-fi
-sysrc grafana_enable=YES grafana_config=/usr/local/etc/grafana/grafana.ini grafana_homepath="$homepath" >/dev/null
+postgres {
+    ip4.addr = 127.0.0.1;
+}
 
-if [ -n "${POSTGRES_EXPORTER_DSN}" ]; then
-    install -d -m 0700 /etc/rc.conf.d
-    umask 077
-    printf '%s\n' 'postgres_exporter_enable="YES"' 'postgres_exporter_listen_address="127.0.0.1:9187"' "postgres_exporter_env=\"DATA_SOURCE_URI=${POSTGRES_EXPORTER_DSN}\"" > /etc/rc.conf.d/postgres_exporter
-else
-    sysrc postgres_exporter_enable=NO >/dev/null
-fi
+kea {
+    ip4.addr = 127.0.0.1;
+}
+
+prometheus {
+    ip4.addr = 127.0.0.1;
+}
+
+grafana {
+    ip4.addr = ${MGMT_ADDR};
+}
+
+node_exporter {
+    ip4.addr = 127.0.0.1;
+}
+
+postgres_exporter {
+    ip4.addr = 127.0.0.1;
+}
+EOF
+
+echo "[+] Control plane service configurations updated for FreeBSD Jail / container runtime."
+
+

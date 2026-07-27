@@ -119,12 +119,9 @@ Start services:
 
 ```sh
 service pf start
-service kea_dhcp4 start
-service kea_ctrl_agent start
-service node_exporter start
-service postgres_exporter start
-service prometheus start
-service grafana start
+sh scripts/start_services.sh
+# or manage containers:
+container list
 ```
 
 The complete sequence is documented in `docs/installation.md` and `docs/observability.md`.

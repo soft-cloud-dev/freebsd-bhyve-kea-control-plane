@@ -5,11 +5,12 @@
 | Component | Authority |
 |---|---|
 | OpenSSH / future FreeIPA SSH CA | Administrative identity and host trust |
-| PostgreSQL | VM inventory and IP allocation state |
-| Kea DHCP4 | Runtime delivery of network configuration |
+| PostgreSQL (Container) | VM inventory and IP allocation state |
+| Kea DHCP4 (Container) | Runtime delivery of network configuration |
 | vm-bhyve | Guest lifecycle |
 | ZFS | Guest storage |
 | PF and blacklistd | Network boundary enforcement and abuse suppression |
+| Container CLI (`container`) | Lifecycle engine for control plane service containers |
 | Stork | Optional Kea operations and monitoring plane |
 
 PostgreSQL is authoritative for intended VM and IPAM state. Kea reservations are derived runtime state. A reservation must therefore be removed or repaired when provisioning does not complete.

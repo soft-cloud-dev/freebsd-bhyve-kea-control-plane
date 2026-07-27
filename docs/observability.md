@@ -39,12 +39,14 @@ The example rc configuration connects through the local PostgreSQL Unix socket. 
 
 ## Start order
 
+Control plane services are managed via `container` CLI:
+
 ```sh
-service postgresql start
-service node_exporter start
-service postgres_exporter start
-service prometheus start
-service grafana start
+sh scripts/start_services.sh
+# or manage individual containers:
+container list
+container start prometheus
+container start grafana
 ```
 
 ## Validation

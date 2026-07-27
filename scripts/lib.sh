@@ -35,3 +35,28 @@ kea_request() {
         -d "$payload" \
         "$url"
 }
+
+container_is_running() {
+    name="$1"
+    if command -v jls >/dev/null 2>&1; then
+        jls -j "$name" >/dev/null 2>&1 || jls 2>/dev/null | awk -v name="$name" '$3 == name || $1 == name { found=1 } END { exit !found }'
+    elif command -v container >/dev/null 2>&1; then
+        container list 2>/dev/null | awk -v name="$name" '$1 == name || $2 == name { found=1 } END { exit !found }'
+    else
+        return 1
+    fi
+}
+
+container_exec() {
+    name="$1"
+    shift
+    if command -v jexec >/dev/null 2>&1; then
+        jexec "$name" "$@"
+    elif command -v container >/dev/null 2>&1; then
+        container exec "$name" "$@"
+    else
+        die "No container or FreeBSD jail engine available"
+    fi
+}
+
+

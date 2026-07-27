@@ -88,15 +88,9 @@ The vm-bhyve template attaches `seed.iso` as an `ahci-cd` device. The provisione
 
 ```sh
 make validate-freebsd
+container list
 sockstat -4 -6 -l
 service blacklistd status
-service postgresql status
-service kea_dhcp4 status
-service kea_ctrl_agent status
-service node_exporter status
-service prometheus status
-service postgres_exporter status
-service grafana status
 vm list
 ```
 
