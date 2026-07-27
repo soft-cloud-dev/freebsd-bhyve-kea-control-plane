@@ -16,14 +16,16 @@ if command -v jail >/dev/null 2>&1 && [ -f /etc/jail.conf ]; then
         install -d -m 0755 "/usr/local/jails/$j/dev"
         container_is_running "$j" || jail -c "$j" 2>/dev/null || service jail start "$j" 2>/dev/null || true
     done
-elif command -v container >/dev/null 2>&1; then
+fi
+
+if command -v container >/dev/null 2>&1 && ! command -v jail >/dev/null 2>&1; then
     echo "[*] Starting control plane containerized services..."
     container_is_running kea || container run -d --name kea -p 8000:8000 -v /usr/local/etc/kea:/etc/kea kea:latest || container start kea || true
     container_is_running node-exporter || container run -d --name node-exporter -p 9100:9100 prom/node-exporter:latest || container start node-exporter || true
     container_is_running prometheus || container run -d --name prometheus -p 9090:9090 -v /usr/local/etc/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus:latest || container start prometheus || true
     container_is_running postgres-exporter || container run -d --name postgres-exporter -p 9187:9187 prometheuscommunity/postgres-exporter:latest || container start postgres-exporter || true
     container_is_running grafana || container run -d --name grafana -p 3000:3000 -v /usr/local/etc/grafana:/etc/grafana grafana/grafana:latest || container start grafana || true
-else
+elif ! command -v container >/dev/null 2>&1 || command -v jail >/dev/null 2>&1; then
     if [ -x /usr/local/etc/rc.d/kea ]; then
         kea_service=kea
     elif [ -x /usr/local/etc/rc.d/kea_dhcp4 ]; then

@@ -76,6 +76,17 @@ for dashboard in config/grafana/provisioning/dashboards/json/*.json; do
 done
 
 sysrc pf_enable=YES pflog_enable=YES jail_enable=YES >/dev/null
+if [ -x /usr/local/etc/rc.d/kea ]; then
+    sysrc kea_enable=YES >/dev/null
+elif [ -x /usr/local/etc/rc.d/kea_dhcp4 ]; then
+    sysrc kea_dhcp4_enable=YES >/dev/null
+fi
+[ ! -x /usr/local/etc/rc.d/node_exporter ] || sysrc node_exporter_enable=YES >/dev/null
+[ ! -x /usr/local/etc/rc.d/prometheus ] || sysrc prometheus_enable=YES >/dev/null
+[ ! -x /usr/local/etc/rc.d/grafana ] || sysrc grafana_enable=YES >/dev/null
+if [ -n "${POSTGRES_EXPORTER_DSN}" ] && [ -x /usr/local/etc/rc.d/postgres_exporter ]; then
+    sysrc postgres_exporter_enable=YES >/dev/null
+fi
 
 install -d -m 0755 /usr/local/jails
 
@@ -86,9 +97,12 @@ done
 
 cat > /etc/jail.conf <<EOF
 # Control plane FreeBSD Jails configuration
+persist;
 exec.start = "/bin/sh -c 'exit 0'";
 exec.stop = "/bin/sh -c 'exit 0'";
 exec.clean;
+exec.system_jail_user;
+exec.system_exec_subsystem;
 mount.devfs;
 host.hostname = "\$name.control-plane.local";
 path = "/usr/local/jails/\$name";
