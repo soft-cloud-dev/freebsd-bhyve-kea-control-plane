@@ -109,7 +109,7 @@ configure-services:
 	sysrc -x kea_ctrl_agent_enable >/dev/null 2>&1 || true; \
 	sysrc prometheus_enable=YES prometheus_config=/usr/local/etc/prometheus.yml prometheus_args='--web.listen-address=127.0.0.1:9090' >/dev/null; \
 	sysrc node_exporter_enable=YES node_exporter_listen_address=127.0.0.1:9100 >/dev/null; \
-	sysrc grafana_enable=YES grafana_config=/usr/local/etc/grafana/grafana.ini >/dev/null; \
+	sysrc grafana_enable=YES grafana_config=/usr/local/etc/grafana/grafana.ini grafana_homepath=/usr/local/share/grafana >/dev/null; \
 	if [ -n "${POSTGRES_EXPORTER_DSN}" ]; then \
 	  install -d -m 0700 /etc/rc.conf.d; umask 077; \
 	  printf '%s\n' 'postgres_exporter_enable="YES"' 'postgres_exporter_listen_address="127.0.0.1:9187"' 'postgres_exporter_env="DATA_SOURCE_URI=${POSTGRES_EXPORTER_DSN}"' > /etc/rc.conf.d/postgres_exporter; \
@@ -119,7 +119,7 @@ init-postgresql:
 	@set -eu; sysrc postgresql_enable=YES >/dev/null; \
 	if [ ! -s "${PG_DATA}/PG_VERSION" ]; then service postgresql initdb; fi; \
 	service postgresql status >/dev/null 2>&1 || service postgresql start; \
-	i=0; until pg_isready -q; do i=$$((i+1)); [ $$i -lt 30 ] || exit 1; sleep 1; done; \
+	i=0; until sudo -u "${PG_USER}" pg_isready -q -d postgres; do i=$$((i+1)); [ $$i -lt 30 ] || { echo 'ERROR: PostgreSQL did not become ready' >&2; exit 1; }; sleep 1; done; \
 	if ! sudo -u "${PG_USER}" psql -X -qAt -d postgres -c "SELECT 1 FROM pg_database WHERE datname='${PG_DATABASE}'" | grep -qx 1; then sudo -u "${PG_USER}" createdb "${PG_DATABASE}"; fi; \
 	sudo -u "${PG_USER}" psql -X -v ON_ERROR_STOP=1 -d "${PG_DATABASE}" -f db/001_inventory.sql; \
 	sudo -u "${PG_USER}" psql -X -v ON_ERROR_STOP=1 -d "${PG_DATABASE}" -f db/002_monitoring.sql
