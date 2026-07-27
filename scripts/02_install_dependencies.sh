@@ -22,7 +22,8 @@ pkg install -y \
     py312-cloud-init \
     sudo \
     tmux \
-    vm-bhyve || true
+    vm-bhyve \
+    bhyve-firmware || true
 
 install -d -m 0750 /usr/local/etc/kea
 if [ -f config/keactrl.conf ]; then
