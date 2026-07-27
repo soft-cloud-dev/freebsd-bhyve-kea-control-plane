@@ -42,8 +42,25 @@ elif ! command -v container >/dev/null 2>&1 || command -v jail >/dev/null 2>&1; 
         service postgres_exporter restart 2>/dev/null || service postgres_exporter start 2>/dev/null || true
     fi
     [ ! -x /usr/local/etc/rc.d/grafana ] || service grafana restart 2>/dev/null || service grafana start 2>/dev/null || true
-    [ ! -x /usr/local/etc/rc.d/loki ] || service loki restart 2>/dev/null || service loki start 2>/dev/null || true
-    [ ! -x /usr/local/etc/rc.d/promtail ] || service promtail restart 2>/dev/null || service promtail start 2>/dev/null || true
+    loki_service=""
+    if [ -x /usr/local/etc/rc.d/loki ]; then
+        loki_service="loki"
+    elif [ -x /usr/local/etc/rc.d/grafana_loki ]; then
+        loki_service="grafana_loki"
+    elif [ -x /usr/local/etc/rc.d/grafana-loki ]; then
+        loki_service="grafana-loki"
+    fi
+    [ -z "$loki_service" ] || service "$loki_service" restart 2>/dev/null || service "$loki_service" start 2>/dev/null || true
+
+    promtail_service=""
+    if [ -x /usr/local/etc/rc.d/promtail ]; then
+        promtail_service="promtail"
+    elif [ -x /usr/local/etc/rc.d/grafana_promtail ]; then
+        promtail_service="grafana_promtail"
+    elif [ -x /usr/local/etc/rc.d/grafana-promtail ]; then
+        promtail_service="grafana-promtail"
+    fi
+    [ -z "$promtail_service" ] || service "$promtail_service" restart 2>/dev/null || service "$promtail_service" start 2>/dev/null || true
 fi
 
 user=$(sed -n '1p' "${KEA_API_USER_FILE}")

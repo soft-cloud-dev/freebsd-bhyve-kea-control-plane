@@ -106,8 +106,20 @@ fi
 [ ! -x /usr/local/etc/rc.d/node_exporter ] || sysrc node_exporter_enable=YES >/dev/null
 [ ! -x /usr/local/etc/rc.d/prometheus ] || sysrc prometheus_enable=YES >/dev/null
 [ ! -x /usr/local/etc/rc.d/grafana ] || sysrc grafana_enable=YES >/dev/null
-[ ! -x /usr/local/etc/rc.d/loki ] || sysrc loki_enable=YES >/dev/null
-[ ! -x /usr/local/etc/rc.d/promtail ] || sysrc promtail_enable=YES >/dev/null
+if [ -x /usr/local/etc/rc.d/loki ]; then
+    sysrc loki_enable=YES >/dev/null
+elif [ -x /usr/local/etc/rc.d/grafana_loki ]; then
+    sysrc grafana_loki_enable=YES >/dev/null
+elif [ -x /usr/local/etc/rc.d/grafana-loki ]; then
+    sysrc grafana_loki_enable=YES >/dev/null
+fi
+if [ -x /usr/local/etc/rc.d/promtail ]; then
+    sysrc promtail_enable=YES >/dev/null
+elif [ -x /usr/local/etc/rc.d/grafana_promtail ]; then
+    sysrc grafana_promtail_enable=YES >/dev/null
+elif [ -x /usr/local/etc/rc.d/grafana-promtail ]; then
+    sysrc grafana_promtail_enable=YES >/dev/null
+fi
 if [ -n "${POSTGRES_EXPORTER_DSN}" ] && [ -x /usr/local/etc/rc.d/postgres_exporter ]; then
     sysrc postgres_exporter_enable=YES >/dev/null
 fi

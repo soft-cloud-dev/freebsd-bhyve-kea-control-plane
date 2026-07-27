@@ -15,17 +15,19 @@ pkg install -y \
     grafana \
     jq \
     kea \
-    loki \
     node_exporter \
     postgresql16-client \
     postgresql16-server \
     prometheus \
-    promtail \
     py312-cloud-init \
     sudo \
     tmux \
     vm-bhyve \
     bhyve-firmware || true
+
+pkg install -y loki grafana-loki promtail grafana-promtail 2>/dev/null || \
+    pkg install -y grafana-loki grafana-promtail 2>/dev/null || \
+    pkg install -y loki promtail 2>/dev/null || true
 
 install -d -m 0750 /usr/local/etc/kea
 if [ -f config/keactrl.conf ]; then
