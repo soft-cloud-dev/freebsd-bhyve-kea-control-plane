@@ -32,11 +32,24 @@ config/
   rc.conf.example
 db/
   001_inventory.sql
+docs/
+  architecture.md
+  installation.md
+  operations.md
+  security-model.md
 scripts/
   01_host_setup.sh
   02_install_dependencies.sh
   provision_vm.sh
   rollback_vm.sh
+templates/
+  vm-bhyve.conf
+tests/
+  test_kea.sh
+  test_pf.sh
+  test_provisioner.sh
+Makefile
+LICENSE
 ```
 
 ## Security model
@@ -48,6 +61,8 @@ scripts/
 - PostgreSQL should use a local Unix socket and a dedicated operating-system role.
 - Provisioning inputs are syntactically restricted before reaching `vm-bhyve`, SQL, or JSON.
 - Kea API responses are validated; failed operations trigger compensating rollback.
+
+See `docs/security-model.md` for assets, controls, and residual risks.
 
 ## Installation
 
@@ -79,21 +94,24 @@ ON CONFLICT (name) DO NOTHING;
 SQL
 ```
 
-Initialize `vm-bhyve` after reviewing its datastore and bridge configuration:
+Initialize `vm-bhyve` after reviewing its datastore, switch, template, and bridge configuration:
 
 ```sh
+install -m 0644 templates/vm-bhyve.conf /zroot/vm/.templates/freebsd.conf
 vm init
 service pf start
 service kea_dhcp4 start
 service kea_ctrl_agent start
 ```
 
+The full sequence is documented in `docs/installation.md`.
+
 ## Provisioning
 
 The scripts expect local PostgreSQL authentication to permit the invoking administrative role. Prefer a dedicated database role over long-term use of `postgres`.
 
 ```sh
-chmod 0750 scripts/*.sh
+chmod 0750 scripts/*.sh tests/*.sh
 PGDATABASE=inventory \
 PGUSER=postgres \
 IPAM_POOL=vm-lan \
@@ -107,7 +125,22 @@ Deprovision:
 PGDATABASE=inventory PGUSER=postgres sh scripts/rollback_vm.sh db-node-01
 ```
 
-## Operational checks
+## Validation
+
+Portable shell checks:
+
+```sh
+make lint
+make test
+```
+
+FreeBSD host validation:
+
+```sh
+make validate-freebsd
+```
+
+Operational checks:
 
 ```sh
 sshd -t
@@ -122,14 +155,20 @@ vm list
 sudo -u postgres psql -d inventory -c 'TABLE vms;'
 ```
 
+## Reconciliation decision
+
+The uploaded bootstrap proposal was used as a structural source, not applied verbatim. The repository retains the existing safer implementations for transactional IPAM, Kea response checking, service naming, rollback, input validation, and host hardening. Missing scaffolding, tests, templates, and focused documentation were added.
+
+In particular, `disk0_opts="volblocksize=16k"` was not adopted: vm-bhyve documents `disk0_opts` as bhyve device options, while ZFS `volblocksize` must be selected when the zvol is created.
+
 ## Known boundaries
 
 - The `vm info` parser is isolated but still depends on human-readable `vm-bhyve` output. Replace it when a stable machine-readable interface is available.
 - `xattr=sa` is attempted and automatically falls back to `xattr=on` when unsupported.
-- `volblocksize` is a zvol creation-time property and must be selected in each VM/template path.
+- `volblocksize` is a zvol creation-time property and must be selected in each VM/template provisioning path.
 - Stork is not installed automatically because FreeBSD package availability and deployment topology vary. It may run on a management VM or another supported host while its agent observes Kea.
 - The provided Kea and PF configurations are examples. Interface names, paths, and hook-library packaging must be verified on the target FreeBSD release.
 
 ## License
 
-BSD-2-Clause is recommended for this repository. Add the copyright holder and year before distribution.
+BSD-3-Clause. See `LICENSE`.
