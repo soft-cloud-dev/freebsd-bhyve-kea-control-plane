@@ -9,6 +9,9 @@ LAN_NET ?= 10.0.20.0/24
 VM_DATASET ?= zroot/vm
 VM_DIR ?= zfs:${VM_DATASET}
 MGMT_GROUP ?= wheel
+MGMT_USER ?= admin
+SSH_ADMIN_KEY_FILE ?=
+SSH_ADMIN_AUTHORIZED_KEY ?=
 TRUSTED_SSH_READY ?= no
 PG_USER ?= postgres
 PG_DATABASE ?= inventory
@@ -32,7 +35,8 @@ TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_observability.sh tests/tes
 
 all help:
 	@echo "FreeBSD bhyve + Kea Control Plane"
-	@echo "Run: make install TRUSTED_SSH_READY=yes EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0"
+	@echo "Run: make install TRUSTED_SSH_READY=yes SSH_ADMIN_KEY_FILE=/root/id_ed25519.pub EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0"
+	@echo "SSH after hardening: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
 
 syntax:
 	@set -e; for file in ${SCRIPTS} ${TESTS}; do echo "sh -n $$file"; sh -n "$$file"; done
@@ -55,15 +59,17 @@ check-platform:
 
 check-trust:
 	@test "${TRUSTED_SSH_READY}" = yes || { echo "ERROR: confirm trusted SSH with TRUSTED_SSH_READY=yes" >&2; exit 1; }
+	@test -n "${SSH_ADMIN_KEY_FILE}${SSH_ADMIN_AUTHORIZED_KEY}" || { echo "ERROR: set SSH_ADMIN_KEY_FILE or SSH_ADMIN_AUTHORIZED_KEY" >&2; exit 1; }
 
 install: check-root check-platform check-trust syntax install-dependencies configure-host configure-services init-postgresql init-ipam init-vm start-services validate-freebsd
 	@echo "[+] Installation completed"
+	@echo "[+] SSH login: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
 
 install-dependencies:
 	@sh scripts/02_install_dependencies.sh
 
 configure-host:
-	@VM_DATASET="${VM_DATASET}" MGMT_GROUP="${MGMT_GROUP}" sh scripts/01_host_setup.sh
+	@VM_DATASET="${VM_DATASET}" MGMT_GROUP="${MGMT_GROUP}" MGMT_USER="${MGMT_USER}" SSH_ADMIN_KEY_FILE="${SSH_ADMIN_KEY_FILE}" SSH_ADMIN_AUTHORIZED_KEY="${SSH_ADMIN_AUTHORIZED_KEY}" sh scripts/01_host_setup.sh
 
 configure-services:
 	@set -eu; \
