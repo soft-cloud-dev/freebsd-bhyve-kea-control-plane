@@ -44,16 +44,22 @@ IFS='|' read -r MAC_ADDRESS IP_ADDRESS POOL_ID KEA_SUBNET_ID <<EOF
 $row
 EOF
 
-payload=$(jq -n \
-    --arg mac "$MAC_ADDRESS" \
-    --argjson subnet_id "$KEA_SUBNET_ID" \
-    '{command:"reservation-del",arguments:{target:["memory"],"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
-response=$(kea_request "$payload")
-result=$(printf '%s' "$response" | jq -er '.[0].result')
-[ "$result" -eq 0 ] || {
-    echo "ERROR: Kea rejected reservation removal: $response" >&2
-    exit 1
-}
+cfg_response=$(kea_request '{"command":"config-get"}')
+cfg_result=$(printf '%s' "$cfg_response" | jq -er '.[0].result')
+if [ "$cfg_result" -eq 0 ]; then
+    new_cfg=$(printf '%s' "$cfg_response" | jq --arg mac "$MAC_ADDRESS" \
+        '.[0].arguments.Dhcp4.subnet4 |= map(.reservations |= (. // []) | map(select(."hw-address" != $mac)))')
+    set_payload=$(printf '%s' "$new_cfg" | jq '{command:"config-set",arguments:.[0].arguments}')
+    set_response=$(kea_request "$(printf '%s' "$set_payload")")
+    set_result=$(printf '%s' "$set_response" | jq -er '.[0].result')
+    [ "$set_result" -eq 0 ] || {
+        echo "ERROR: Kea config-set failed during rollback: $set_response" >&2
+        exit 1
+    }
+    kea_request '{"command":"config-write"}' >/dev/null 2>&1 || true
+else
+    echo "WARNING: Kea config-get failed, reservation may remain: $cfg_response" >&2
+fi
 
 vm stop "$VM_NAME" >/dev/null 2>&1 || true
 vm destroy -f "$VM_NAME"

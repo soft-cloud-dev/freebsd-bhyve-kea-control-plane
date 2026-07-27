@@ -131,11 +131,13 @@ rollback() {
         echo "[!] Provisioning failed; rolling back" >&2
 
         if [ "$kea_reserved" -eq 1 ]; then
-            payload=$(jq -n \
-                --arg mac "$MAC_ADDRESS" \
-                --argjson subnet_id "$KEA_SUBNET_ID" \
-                '{command:"reservation-del",arguments:{target:["memory"],"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
-            kea_request "$payload" >/dev/null 2>&1 || true
+            cfg=$(kea_request '{"command":"config-get"}' 2>/dev/null) || true
+            if [ -n "$cfg" ]; then
+                new_cfg=$(printf '%s' "$cfg" | jq --arg mac "$MAC_ADDRESS" \
+                    '.[0].arguments.Dhcp4.subnet4 |= map(.reservations |= map(select(."hw-address" != $mac)))')
+                kea_request "{\"command\":\"config-set\",\"arguments\":$(printf '%s' "$new_cfg" | jq '.[0].arguments')}" >/dev/null 2>&1 || true
+                kea_request '{"command":"config-write"}' >/dev/null 2>&1 || true
+            fi
         fi
 
         if [ "$inserted_vm" -eq 1 ]; then
@@ -245,15 +247,29 @@ EOF
 inserted_vm=1
 
 echo "[5/7] Adding Kea reservation"
-payload=$(jq -n \
+cfg_response=$(kea_request '{"command":"config-get"}')
+cfg_result=$(printf '%s' "$cfg_response" | jq -er '.[0].result')
+[ "$cfg_result" -eq 0 ] || die "Kea config-get failed: $cfg_response"
+
+new_cfg=$(printf '%s' "$cfg_response" | jq \
     --arg mac "$MAC_ADDRESS" \
     --arg ip "$IP_ADDRESS" \
     --arg hostname "$VM_NAME" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
-    '{command:"reservation-add",arguments:{target:["memory"],reservation:{"subnet-id":$subnet_id,"hw-address":$mac,"ip-address":$ip,"hostname":$hostname}}}')
-response=$(kea_request "$payload")
-result=$(printf '%s' "$response" | jq -er '.[0].result')
-[ "$result" -eq 0 ] || die "Kea rejected reservation: $response"
+    '.[0].arguments.Dhcp4.subnet4 |= map(
+        if .["id"] == $subnet_id then
+            .reservations |= (. // []) + [{"hw-address":$mac,"ip-address":$ip,"hostname":$hostname}]
+        else . end
+    )')
+
+set_payload=$(printf '%s' "$new_cfg" | jq '{command:"config-set",arguments:.[0].arguments}')
+set_response=$(kea_request "$(printf '%s' "$set_payload")") 
+set_result=$(printf '%s' "$set_response" | jq -er '.[0].result')
+[ "$set_result" -eq 0 ] || die "Kea config-set failed: $set_response"
+
+write_response=$(kea_request '{"command":"config-write"}')
+write_result=$(printf '%s' "$write_response" | jq -er '.[0].result')
+[ "$write_result" -eq 0 ] || die "Kea config-write failed: $write_response"
 kea_reserved=1
 
 echo "[6/7] Starting VM"
