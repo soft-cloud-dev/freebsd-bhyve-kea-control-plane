@@ -34,8 +34,8 @@ grep -q '127\.0\.0\.1:9100' "$PROMETHEUS_CONF" || \
     die "node_exporter target is not loopback-bound"
 grep -q '127\.0\.0\.1:9187' "$PROMETHEUS_CONF" || \
     die "postgres_exporter target is not loopback-bound"
-grep -q 'http_listen_address:[[:space:]]*127\.0\.0\.1' "$LOKI_CONF" || \
-    die "Loki HTTP listen address is not loopback-bound"
+grep -q 'http_listen_port:[[:space:]]*3100' "$LOKI_CONF" || \
+    die "Loki HTTP listen port is not configured to 3100"
 grep -q 'url:[[:space:]]*http://127\.0\.0\.1:3100/loki/api/v1/push' "$PROMTAIL_CONF" || \
     die "Promtail client push URL does not target loopback Loki"
 
