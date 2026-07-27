@@ -239,7 +239,9 @@
         "uid": "prometheus"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "noValue": "0"
+        },
         "overrides": []
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
@@ -258,7 +260,7 @@
       },
       "targets": [
         {
-          "expr": "pg_stat_database_numbackends{datname=\"inventory\"}",
+          "expr": "pg_stat_database_numbackends{datname=\"inventory\"} or pg_stat_database_numbackends{datname=\"postgres\"} or pg_stat_database_numbackends or vector(0)",
           "legendFormat": "inventory connections",
           "refId": "A"
         }
