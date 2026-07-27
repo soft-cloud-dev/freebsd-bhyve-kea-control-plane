@@ -1,0 +1,60 @@
+name: Portable CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck jq make
+
+      - name: Validate POSIX shell
+        run: make lint
+
+      - name: Run portable tests
+        run: make test
+
+      - name: Validate JSON files
+        run: |
+          find config -type f -name '*.json' -print0 |
+            xargs -0 -r -n1 jq empty
+
+      - name: Validate YAML files
+        run: |
+          ruby -e '
+            require "yaml"
+            Dir.glob("{config,.github}/**/*.{yml,yaml}").sort.each do |path|
+              YAML.safe_load(File.read(path), aliases: true)
+              puts "OK #{path}"
+            end
+          '
+
+      - name: Reject committed secrets
+        run: |
+          if grep -RInE \
+            --exclude-dir=.git \
+            --exclude='*.md' \
+            '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ssh-ed25519 AAAA[[:alnum:]+/]{20,}|postgresql://[^[:space:]]+:[^[:space:]@]+@)' \
+            .; then
+            echo 'Potential secret material detected.' >&2
+            exit 1
+          fi
