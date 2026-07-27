@@ -10,10 +10,14 @@ pkg update -f
 pkg install -y \
     ca_root_nss \
     curl \
+    grafana \
     jq \
     kea \
+    node_exporter \
     postgresql16-client \
     postgresql16-server \
+    prometheus \
+    prometheus-postgres-exporter \
     py311-cloud-init \
     sudo \
     tmux \
@@ -27,5 +31,14 @@ sysrc kea_dhcp4_enable=YES >/dev/null
 sysrc kea_ctrl_agent_enable=YES >/dev/null
 sysrc pf_enable=YES >/dev/null
 sysrc pflog_enable=YES >/dev/null
+sysrc prometheus_enable=YES >/dev/null
+sysrc prometheus_config="/usr/local/etc/prometheus.yml" >/dev/null
+sysrc prometheus_args="--web.listen-address=127.0.0.1:9090" >/dev/null
+sysrc node_exporter_enable=YES >/dev/null
+sysrc node_exporter_listen_address="127.0.0.1:9100" >/dev/null
+sysrc postgres_exporter_enable=YES >/dev/null
+sysrc postgres_exporter_listen_address="127.0.0.1:9187" >/dev/null
+sysrc grafana_enable=YES >/dev/null
+sysrc grafana_config="/usr/local/etc/grafana/grafana.ini" >/dev/null
 
-echo "Dependencies installed. Review config/ before starting services."
+echo "Dependencies installed. Review config/, credentials, and interface bindings before starting services."
