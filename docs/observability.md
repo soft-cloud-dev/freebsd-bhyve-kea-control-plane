@@ -5,12 +5,13 @@
 ```text
 node_exporter 127.0.0.1:9100 ----+
 postgres_exporter 127.0.0.1:9187 +--> Prometheus 127.0.0.1:9090 --+
+Stork Kea exporter 127.0.0.1:9547 +                              |
 Prometheus self-metrics ----------+                              |
                                                                  v
 Promtail 127.0.0.1:9080 (/var/log/*) --> Loki 127.0.0.1:3100 -> Grafana 10.0.10.2:3000
 ```
 
-Prometheus, Loki, Promtail, and both exporters bind to loopback. Grafana is the only component exposed on the management VLAN. PF permits TCP/3000 only from `mgmt_net`.
+Prometheus, Loki, Promtail, and all exporters bind to loopback. Grafana and the Stork Kea dashboard are exposed on the management VLAN. PF permits TCP/3000 and TCP/8080 only from `mgmt_net`.
 
 ## Install configuration
 
@@ -52,15 +53,18 @@ container list
 container start prometheus
 container start loki
 container start grafana
+service stork_server status
+service stork_agent status
 ```
 
 ## Validation
 
 ```sh
 promtool check config /usr/local/etc/prometheus.yml
-sockstat -4 -6 -l | egrep ':(3000|3100|9090|9100|9187)'
+sockstat -4 -6 -l | egrep ':(3000|3100|8080|8081|9090|9100|9187|9547)'
 fetch -qo- http://127.0.0.1:9100/metrics | head
 fetch -qo- http://127.0.0.1:9187/metrics | head
+fetch -qo- http://127.0.0.1:9547/metrics | head
 fetch -qo- http://127.0.0.1:9090/-/ready
 fetch -qo- http://127.0.0.1:3100/ready
 grafana cli --config /usr/local/etc/grafana/grafana.ini admin reset-admin-password 'REPLACE-ME'
@@ -69,10 +73,13 @@ grafana cli --config /usr/local/etc/grafana/grafana.ini admin reset-admin-passwo
 Expected bindings:
 
 - Grafana: management address, TCP/3000
+- Stork dashboard: management address, TCP/8080
+- Stork agent: `127.0.0.1:8081`
 - Prometheus: `127.0.0.1:9090`
 - Loki: `127.0.0.1:3100`
 - node_exporter: `127.0.0.1:9100`
 - postgres_exporter: `127.0.0.1:9187`
+- Stork Kea exporter: `127.0.0.1:9547`
 
 ## Initial dashboards
 

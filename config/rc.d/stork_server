@@ -1,0 +1,26 @@
+#!/bin/sh
+
+# PROVIDE: stork_server
+# REQUIRE: LOGIN postgresql NETWORKING
+# KEYWORD: shutdown
+
+# shellcheck source=/dev/null
+. /etc/rc.subr
+
+name="stork_server"
+rcvar="stork_server_enable"
+
+load_rc_config "$name"
+
+: "${stork_server_enable:=NO}"
+: "${stork_server_env_file:=/usr/local/etc/stork/server.env}"
+: "${stork_server_log_file:=/var/log/stork/server.log}"
+
+pidfile="/var/run/${name}.pid"
+stork_server_program="/usr/local/bin/stork-server"
+command="/usr/sbin/daemon"
+procname="/usr/sbin/daemon"
+command_args="-r -P ${pidfile} -T ${name} -u stork-server -o ${stork_server_log_file} ${stork_server_program} --use-env-file --env-file=${stork_server_env_file}"
+required_files="${stork_server_program} ${stork_server_env_file}"
+
+run_rc_command "$1"

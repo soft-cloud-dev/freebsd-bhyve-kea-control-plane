@@ -5,13 +5,13 @@
 | Component | Authority |
 |---|---|
 | OpenSSH / future FreeIPA SSH CA | Administrative identity and host trust |
-| PostgreSQL (Container) | VM inventory and IP allocation state |
+| PostgreSQL (Container) | VM inventory/IP allocation state and the separate Stork application database |
 | Kea DHCP4 (Container) | Runtime delivery of network configuration |
 | vm-bhyve | Guest lifecycle |
 | ZFS | Guest storage |
 | PF and blacklistd | Network boundary enforcement and abuse suppression |
 | Container CLI (`container`) | Lifecycle engine for control plane service containers |
-| Stork | Optional Kea operations and monitoring plane |
+| Stork server + host agent | Kea operations, dashboard, and metrics plane |
 
 PostgreSQL is authoritative for intended VM and IPAM state. Kea reservations are derived runtime state. A reservation must therefore be removed or repaired when provisioning does not complete.
 
@@ -44,6 +44,7 @@ Each completed external action has a compensating rollback action. The shell scr
 - SSH is accepted only on the management interface and from the management subnet.
 - DHCP and internal DNS are accepted only on the VM bridge.
 - Observability endpoints are exposed only on the management interface.
+- The Stork server UI binds to the management address. The local Stork agent and its Kea exporter bind only to loopback.
 - PF starts from a default-deny policy.
 
 ## Storage
@@ -57,4 +58,4 @@ The example vm-bhyve template uses a sparse zvol. `disk0_opts` contains only opt
 - `vm info` is human-readable output, so MAC extraction remains an adapter boundary.
 - Shell traps provide best-effort compensation, not crash-safe distributed transactions.
 - Interface names, Kea hook paths, and package versions vary by FreeBSD release and repository branch.
-- Stork deployment is intentionally separate because server and agent packaging may differ across supported environments.
+- ISC does not publish native FreeBSD packages for Stork. The installer therefore builds a pinned ISC source release and installs FreeBSD rc.d services.

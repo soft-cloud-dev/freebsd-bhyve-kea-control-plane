@@ -6,11 +6,20 @@ require_root
 
 PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT:-120}"
 LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT:-60}"
+STORK_READY_TIMEOUT="${STORK_READY_TIMEOUT:-60}"
+STORK_ENABLE="${STORK_ENABLE:-yes}"
 KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 
 case "$LOKI_READY_TIMEOUT" in
     ''|*[!0-9]*|0) die "LOKI_READY_TIMEOUT must be a positive integer" ;;
+esac
+case "$STORK_READY_TIMEOUT" in
+    ''|*[!0-9]*|0) die "STORK_READY_TIMEOUT must be a positive integer" ;;
+esac
+case "$STORK_ENABLE" in
+    yes|no) ;;
+    *) die "STORK_ENABLE must be yes or no" ;;
 esac
 
 PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh "$(dirname "$0")/apply_pf_safely.sh" apply
@@ -74,6 +83,35 @@ elif ! command -v container >/dev/null 2>&1 || command -v jail >/dev/null 2>&1; 
         die "failed to start the ${promtail_service} service; check /var/log/promtail/promtail.log"
 fi
 
+MGMT_ADDR="${MGMT_ADDR:-10.0.10.2}"
+if [ "$STORK_ENABLE" = yes ]; then
+    [ -x /usr/local/etc/rc.d/stork_server ] || \
+        die "Stork server rc.d service is missing; run the dependency and configuration stages"
+    [ -x /usr/local/etc/rc.d/stork_agent ] || \
+        die "Stork agent rc.d service is missing; run the dependency and configuration stages"
+
+    service stork_server restart 2>/dev/null || \
+        service stork_server start || \
+        die "failed to start Stork server; check /var/log/stork/server.log"
+
+    i=0
+    until curl -fsS "http://${MGMT_ADDR}:8080/" >/dev/null 2>&1; do
+        i=$((i+1))
+        [ "$i" -lt "$STORK_READY_TIMEOUT" ] || {
+            if [ -r /var/log/stork/server.log ]; then
+                echo "Last 20 lines from /var/log/stork/server.log:" >&2
+                tail -n 20 /var/log/stork/server.log >&2
+            fi
+            die "Stork did not become ready on ${MGMT_ADDR}:8080 within ${STORK_READY_TIMEOUT} seconds"
+        }
+        sleep 1
+    done
+
+    service stork_agent restart 2>/dev/null || \
+        service stork_agent start || \
+        die "failed to start Stork agent; check /var/log/stork/agent.log"
+fi
+
 user=$(sed -n '1p' "${KEA_API_USER_FILE}")
 password=$(sed -n '1p' "${KEA_API_PASSWORD_FILE}")
 
@@ -100,7 +138,6 @@ until curl -fsS --user "${user}:${password}" -H 'Content-Type: application/json'
     sleep 1
 done
 
-MGMT_ADDR="${MGMT_ADDR:-10.0.10.2}"
 if [ -x /usr/local/etc/rc.d/grafana ] || (command -v container >/dev/null 2>&1 && container_is_running grafana); then
     i=0
     until curl -fsS "http://${MGMT_ADDR}:3000/login" >/dev/null 2>&1 || curl -fsS "http://127.0.0.1:3000/login" >/dev/null 2>&1; do

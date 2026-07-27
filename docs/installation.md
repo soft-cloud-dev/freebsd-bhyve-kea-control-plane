@@ -24,6 +24,8 @@ make install \
   VM_DATASET=zroot/vm
 ```
 
+The default installation builds Stork `v2.5.0` from ISC’s official source. This requires more build time and temporary disk space than the other package-based stages. To omit the Kea dashboard, add `STORK_ENABLE=no`.
+
 The installer does not attach the physical external interface directly to the VM switch. It creates a manual vm-bhyve switch backed by the existing `LAN_IF` bridge, preserving the intended network boundary.
 
 To enable PostgreSQL metrics, provide the exporter DSN explicitly:
@@ -53,6 +55,7 @@ install-dependencies
 configure-host
 configure-services
 init-postgresql
+init-stork
 init-ipam
 init-vm
 start-services
@@ -64,6 +67,7 @@ Each stage can also be invoked separately, for example:
 ```sh
 make configure-services EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0 MGMT_ADDR=10.0.10.2
 make init-postgresql
+make init-stork
 make init-ipam IPAM_POOL=vm-lan IPAM_FIRST_HOST=10.0.20.10 IPAM_LAST_HOST=10.0.20.99
 make init-vm VM_DATASET=zroot/vm LAN_IF=bridge0
 make start-services
@@ -98,8 +102,17 @@ Expected exposure:
 
 ```text
 Grafana             MGMT_ADDR:3000
+Stork dashboard     MGMT_ADDR:8080
+Stork agent         127.0.0.1:8081
+Stork Kea exporter  127.0.0.1:9547
 Prometheus          127.0.0.1:9090
 node_exporter       127.0.0.1:9100
 postgres_exporter   127.0.0.1:9187
 Kea Control Agent   127.0.0.1:8000
 ```
+
+## Finish Stork enrollment
+
+Browse to `http://MGMT_ADDR:8080`. The first login is `admin` / `admin`; Stork immediately requires a password change. Then open **Services → Machines → Unauthorized**, compare the displayed agent token with `/var/lib/stork-agent/tokens/agent-token.txt`, and authorize the local Kea host.
+
+The Stork agent runs on the host rather than in a separate jail because it must inspect the Kea process and configuration. Its control listener and Prometheus exporter remain loopback-only. The UI is plain HTTP initially; terminate TLS at Stork or an authenticated management reverse proxy before using it across an untrusted network.

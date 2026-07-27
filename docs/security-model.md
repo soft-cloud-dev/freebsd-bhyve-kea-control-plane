@@ -7,6 +7,7 @@
 - VM inventory and ownership metadata
 - IP allocation state
 - Kea reservation state
+- Stork users, sessions, agent certificates, and tokens
 - VM disks and snapshots
 - Management, VM, and external network boundaries
 
@@ -20,7 +21,9 @@ A future `TrustedUserCAKeys` deployment should issue short-lived SSH user certif
 
 ### Network exposure & Jail Isolation
 
-PF uses default deny. Control plane services (PostgreSQL, Kea DHCP4, Prometheus, Grafana, Node Exporter, Postgres Exporter) are containerized and isolated inside FreeBSD Jails (`jail.conf`). SSH and Grafana are management-only. DHCP and DNS are bridge-only. Kea Control Agent and PostgreSQL remain loopback-bound within their service jail boundaries.
+PF uses default deny. Control plane services are isolated with FreeBSD Jails where service discovery allows it. SSH, Grafana, and the Stork UI are management-only. DHCP and DNS are bridge-only. Kea Control Agent, the Stork agent, Stork’s Kea exporter, and PostgreSQL remain loopback-bound.
+
+The Stork agent intentionally runs on the Kea host rather than in an isolated jail because it must inspect the Kea process and configuration. It runs as a dedicated unprivileged user with group-only read access to the Kea API credentials. Agent/server traffic is upgraded to mutual TLS during registration. Verify the pending agent token before authorization.
 
 ### Inventory and IPAM
 
@@ -33,6 +36,10 @@ Database uniqueness constraints provide secondary enforcement for VM names, MAC 
 The Control Agent listens on loopback and is not authenticated by default. Remote access should use a separately authenticated TLS reverse proxy on the management network; direct exposure is prohibited.
 
 JSON payloads are generated with `jq`, and the provisioner checks Kea result codes before continuing.
+
+### Stork
+
+The UI is restricted to the management network by its bind address and PF. The generated database password is stored in a root-owned, group-readable file for the `stork-server` service. Change the initial `admin` password at first login. Production deployments should enable TLS directly or use an authenticated TLS reverse proxy; the repository’s initial HTTP setup is suitable only for a trusted management segment.
 
 ### Provisioning
 
@@ -47,3 +54,4 @@ Compensation is best effort. A host crash can leave partial state, requiring rec
 - Kea hook-library locations vary by package build.
 - Human-readable `vm info` parsing may change between vm-bhyve versions.
 - ZFS workload tuning requires measurement; `primarycache=metadata` is not universally optimal.
+- ISC does not regularly test Stork on FreeBSD, so source builds and upgrades require target-host validation.

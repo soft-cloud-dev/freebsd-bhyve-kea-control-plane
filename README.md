@@ -1,6 +1,6 @@
 # FreeBSD bhyve + Kea Control Plane
 
-A minimal FreeBSD-native control plane for trusted SSH access, ZFS-backed `vm-bhyve` guests, transactional PostgreSQL inventory/IPAM, Kea DHCP reservations, PF trust boundaries, Prometheus metrics, and Grafana dashboards.
+A FreeBSD-native control plane for trusted SSH access, ZFS-backed `vm-bhyve` guests, transactional PostgreSQL inventory/IPAM, Kea DHCP reservations, the Stork Kea dashboard, PF trust boundaries, Prometheus metrics, and Grafana dashboards.
 
 ## Architecture
 
@@ -12,21 +12,24 @@ SSH trust / FreeIPA CA
   +-------+--------+----------------+
   |                |                |
 ZFS + vm-bhyve  PostgreSQL       Kea DHCP4
-  |            inventory/IPAM       |
+  |          inventory/IPAM +       |
+  |            Stork DB             +-- Stork agent
   +----------------+----------------+
                    |
                 bridge0
                    |
                 bhyve VMs
 
-node_exporter + postgres_exporter
+node_exporter + postgres_exporter + Stork Kea exporter
               |
          Prometheus
               |
            Grafana
+
+Stork server (management TCP/8080) <---- Stork agent (loopback TCP/8081)
 ```
 
-PostgreSQL is the authoritative inventory. Kea is the runtime DHCP service. The provisioner coordinates both and rolls back partial changes. Prometheus and exporters remain loopback-only; Grafana is exposed only on the management VLAN.
+PostgreSQL is the authoritative inventory. Kea is the runtime DHCP service. The provisioner coordinates both and rolls back partial changes. Stork provides the Kea operations dashboard and uses a separate PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana and Stork are exposed only on the management VLAN.
 
 ## Repository layout
 
@@ -39,6 +42,8 @@ config/
   pf.conf
   prometheus.yml
   rc.conf.example
+  rc.d/stork_{server,agent}
+  stork/{server,agent}.env.in
 db/
   001_inventory.sql
   002_monitoring.sql
@@ -51,6 +56,8 @@ docs/
 scripts/
   01_host_setup.sh
   02_install_dependencies.sh
+  init_stork.sh
+  install_stork.sh
   provision_vm.sh
   rollback_vm.sh
 templates/
@@ -67,7 +74,7 @@ LICENSE
 
 - SSH accepts public keys only and denies root login.
 - `blacklistd` complements key-only SSH by suppressing repeated connection abuse.
-- PF defaults to deny and exposes SSH, DHCP, DNS, Grafana, and optional Stork only on their intended interfaces.
+- PF defaults to deny and exposes SSH, DHCP, DNS, Grafana, and Stork only on their intended interfaces.
 - Kea Control Agent, Prometheus, node_exporter, postgres_exporter, and PostgreSQL remain local to the host.
 - Provisioning inputs are syntactically restricted before reaching `vm-bhyve`, SQL, JSON, or cloud-init YAML.
 - Kea API responses are validated; failed operations trigger compensating rollback.
@@ -93,6 +100,7 @@ Initialize PostgreSQL and inventory:
 
 ```sh
 sh scripts/init_postgresql.sh
+sh scripts/init_stork.sh
 sudo -u postgres psql -d inventory <<'SQL'
 INSERT INTO ipam_pools(name, subnet, first_host, last_host, vlan, kea_subnet_id)
 VALUES ('vm-lan', '10.0.20.0/24', '10.0.20.10', '10.0.20.99', 20, 1)
@@ -117,6 +125,8 @@ container list
 ```
 
 The complete sequence is documented in `docs/installation.md` and `docs/observability.md`.
+
+Stork is enabled by default. Its server and agent are built from the pinned official ISC `v2.5.0` source because ISC does not publish native FreeBSD packages. Set `STORK_ENABLE=no` to omit it. After startup, open `http://10.0.10.2:8080`, sign in with the initial `admin` / `admin` credentials, change the password immediately, and authorize the pending local agent under **Services → Machines → Unauthorized**.
 
 ## Provisioning
 
@@ -159,7 +169,7 @@ service grafana status
 - `xattr=sa` is attempted and falls back to `xattr=on` when unsupported.
 - `volblocksize` is a zvol creation-time property and must be selected in each VM/template provisioning path.
 - Grafana is configured for management-network HTTP initially; production TLS and secure cookies require site-specific hostname and certificate decisions.
-- Stork remains optional because server and agent packaging may vary across supported environments.
+- Stork is source-built on FreeBSD and is not regularly tested there by ISC; validate the pinned release on the target FreeBSD version before production use.
 - Interface names, package names, rc.d variables, and hook-library paths must be verified on the target FreeBSD release and package repository branch.
 
 ## License

@@ -64,6 +64,14 @@ sh scripts/start_services.sh
 jls
 jexec postgres psql -U postgres -d inventory
 jexec kea kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
+service stork_server status
+service stork_agent status
+```
+
+The Stork dashboard is at `http://MGMT_ADDR:8080`. Its database is separate from `inventory`. Back it up with:
+
+```sh
+sudo -u postgres pg_dump -Fc stork > stork.dump
 ```
 
 ## Failure handling
@@ -87,6 +95,7 @@ Back up:
 
 - `/etc/rc.conf`, `/etc/pf.conf`, `/etc/jail.conf`, `/etc/ssh`, and `/etc/blacklistd.conf`
 - `/usr/local/etc/kea`
+- `/usr/local/etc/stork`, `/var/lib/stork-agent`, and the Stork PostgreSQL database
 - PostgreSQL inventory using `pg_dump`
 - vm-bhyve templates and guest definitions
 - ZFS snapshots and replication targets

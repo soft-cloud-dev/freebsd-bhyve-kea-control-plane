@@ -17,7 +17,7 @@ It validates:
 - YAML syntax;
 - accidental committed private keys, SSH public keys, or credential-bearing PostgreSQL DSNs.
 
-This layer does not call real FreeBSD services, `vm-bhyve`, ZFS, PF, Kea, PostgreSQL, Prometheus, or Grafana.
+This layer does not call real FreeBSD services, `vm-bhyve`, ZFS, PF, Kea, PostgreSQL, Stork, Prometheus, or Grafana. It statically validates the Stork source pin, loopback agent/exporter bindings, database bootstrap, and startup readiness contract.
 
 ## 2. FreeBSD integration
 

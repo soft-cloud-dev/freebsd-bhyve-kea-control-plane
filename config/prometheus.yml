@@ -23,3 +23,10 @@ scrape_configs:
           - 127.0.0.1:9187
         labels:
           database: inventory
+
+  - job_name: kea
+    static_configs:
+      - targets:
+          - 127.0.0.1:9547
+        labels:
+          collector: stork-agent
