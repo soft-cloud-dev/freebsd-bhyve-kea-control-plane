@@ -73,7 +73,7 @@ Grafana provisions Prometheus as its default datasource. Import or provision das
 
 Useful initial signals:
 
-- host load, CPU, memory, filesystem capacity, and network errors;
+- host load, CPU, memory, filesystem capacity, and extended network signals (throughput RX/TX, packet rates, errors & drops);
 - PostgreSQL availability, connections, transaction rate, locks, and database size;
 - Prometheus target health and scrape duration;
 - ZFS capacity through node-exporter-supported collectors or a reviewed textfile collector;
