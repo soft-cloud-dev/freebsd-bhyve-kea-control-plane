@@ -15,6 +15,7 @@ pkg install -y \
     grafana \
     jq \
     kea \
+    loki \
     node_exporter \
     postgresql16-client \
     postgresql16-server \

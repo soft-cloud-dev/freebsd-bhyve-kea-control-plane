@@ -5,6 +5,8 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 PROMETHEUS_CONF="${PROMETHEUS_CONF:-${ROOT}/config/prometheus.yml}"
 GRAFANA_CONF="${GRAFANA_CONF:-${ROOT}/config/grafana.ini}"
 DATASOURCE_CONF="${DATASOURCE_CONF:-${ROOT}/config/grafana/provisioning/datasources/prometheus.yml}"
+LOKI_CONF="${LOKI_CONF:-${ROOT}/config/loki.yml}"
+LOKI_DATASOURCE_CONF="${LOKI_DATASOURCE_CONF:-${ROOT}/config/grafana/provisioning/datasources/loki.yml}"
 DASHBOARD_PROVIDER="${DASHBOARD_PROVIDER:-${ROOT}/config/grafana/provisioning/dashboards/default.yml}"
 DASHBOARD_DIR="${DASHBOARD_DIR:-${ROOT}/config/grafana/provisioning/dashboards/json}"
 GRAFANA_HEALTH_URL="${GRAFANA_HEALTH_URL:-http://10.0.10.2:3000/api/health}"
@@ -15,6 +17,8 @@ for file in \
     "$PROMETHEUS_CONF" \
     "$GRAFANA_CONF" \
     "$DATASOURCE_CONF" \
+    "$LOKI_CONF" \
+    "$LOKI_DATASOURCE_CONF" \
     "$DASHBOARD_PROVIDER"
 do
     [ -r "$file" ] || die "missing or unreadable file: $file"
@@ -28,6 +32,8 @@ grep -q '127\.0\.0\.1:9100' "$PROMETHEUS_CONF" || \
     die "node_exporter target is not loopback-bound"
 grep -q '127\.0\.0\.1:9187' "$PROMETHEUS_CONF" || \
     die "postgres_exporter target is not loopback-bound"
+grep -q 'http_listen_address:[[:space:]]*127\.0\.0\.1' "$LOKI_CONF" || \
+    die "Loki HTTP listen address is not loopback-bound"
 
 grep -Eq '^[[:space:]]*allow_sign_up[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$GRAFANA_CONF" || \
     die "Grafana user sign-up is not disabled"
@@ -43,6 +49,8 @@ grep -A3 '^\[plugins\]' "$GRAFANA_CONF" | \
 
 grep -q 'url:[[:space:]]*http://127\.0\.0\.1:9090' "$DATASOURCE_CONF" || \
     die "Grafana datasource does not use loopback Prometheus"
+grep -q 'url:[[:space:]]*http://127\.0\.0\.1:3100' "$LOKI_DATASOURCE_CONF" || \
+    die "Grafana datasource does not use loopback Loki"
 
 grep -q 'path:[[:space:]]*/usr/local/etc/grafana/provisioning/dashboards/json' "$DASHBOARD_PROVIDER" || \
     die "Grafana dashboard provider path is incorrect"

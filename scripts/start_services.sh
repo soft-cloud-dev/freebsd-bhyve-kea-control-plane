@@ -12,7 +12,7 @@ PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh "$(dirname "$0")/apply_pf_safely
 
 if command -v jail >/dev/null 2>&1 && [ -f /etc/jail.conf ]; then
     echo "[*] Starting control plane FreeBSD service jails..."
-    for j in postgres kea node_exporter prometheus postgres_exporter grafana; do
+    for j in postgres kea node_exporter prometheus postgres_exporter grafana loki; do
         install -d -m 0755 "/usr/local/jails/$j/dev"
         container_is_running "$j" || jail -c "$j" 2>/dev/null || service jail start "$j" 2>/dev/null || true
     done
@@ -25,6 +25,7 @@ if command -v container >/dev/null 2>&1 && ! command -v jail >/dev/null 2>&1; th
     container_is_running prometheus || container run -d --name prometheus -p 9090:9090 -v /usr/local/etc/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus:latest || container start prometheus || true
     container_is_running postgres-exporter || container run -d --name postgres-exporter -p 9187:9187 prometheuscommunity/postgres-exporter:latest || container start postgres-exporter || true
     container_is_running grafana || container run -d --name grafana -p 3000:3000 -v /usr/local/etc/grafana:/etc/grafana grafana/grafana:latest || container start grafana || true
+    container_is_running loki || container run -d --name loki -p 3100:3100 -v /usr/local/etc/loki.yml:/etc/loki/local-config.yaml grafana/loki:latest || container start loki || true
 elif ! command -v container >/dev/null 2>&1 || command -v jail >/dev/null 2>&1; then
     if [ -x /usr/local/etc/rc.d/kea ]; then
         kea_service=kea
@@ -40,6 +41,7 @@ elif ! command -v container >/dev/null 2>&1 || command -v jail >/dev/null 2>&1; 
         service postgres_exporter restart 2>/dev/null || service postgres_exporter start 2>/dev/null || true
     fi
     [ ! -x /usr/local/etc/rc.d/grafana ] || service grafana restart 2>/dev/null || service grafana start 2>/dev/null || true
+    [ ! -x /usr/local/etc/rc.d/loki ] || service loki restart 2>/dev/null || service loki start 2>/dev/null || true
 fi
 
 user=$(sed -n '1p' "${KEA_API_USER_FILE}")

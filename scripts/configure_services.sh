@@ -54,6 +54,15 @@ if command -v promtool >/dev/null 2>&1; then
     promtool check config /usr/local/etc/prometheus.yml
 fi
 
+if [ -f config/loki.yml ]; then
+    install -m 0644 config/loki.yml /usr/local/etc/loki.yml
+fi
+
+install -d -m 0755 /var/db/loki /var/log/loki
+if id loki >/dev/null 2>&1; then
+    chown -R loki:loki /var/db/loki /var/log/loki
+fi
+
 install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources \
     /usr/local/etc/grafana/provisioning/dashboards/json \
     /var/db/grafana \
@@ -71,6 +80,9 @@ install -m 0644 "$grafana_tmp" /usr/local/etc/grafana.ini
 install -m 0644 "$grafana_tmp" /usr/local/etc/grafana/grafana.ini
 
 install -m 0644 config/grafana/provisioning/datasources/prometheus.yml /usr/local/etc/grafana/provisioning/datasources/prometheus.yml
+if [ -f config/grafana/provisioning/datasources/loki.yml ]; then
+    install -m 0644 config/grafana/provisioning/datasources/loki.yml /usr/local/etc/grafana/provisioning/datasources/loki.yml
+fi
 install -m 0644 config/grafana/provisioning/dashboards/default.yml /usr/local/etc/grafana/provisioning/dashboards/default.yml
 
 for dashboard in config/grafana/provisioning/dashboards/json/*.json; do
@@ -87,13 +99,14 @@ fi
 [ ! -x /usr/local/etc/rc.d/node_exporter ] || sysrc node_exporter_enable=YES >/dev/null
 [ ! -x /usr/local/etc/rc.d/prometheus ] || sysrc prometheus_enable=YES >/dev/null
 [ ! -x /usr/local/etc/rc.d/grafana ] || sysrc grafana_enable=YES >/dev/null
+[ ! -x /usr/local/etc/rc.d/loki ] || sysrc loki_enable=YES >/dev/null
 if [ -n "${POSTGRES_EXPORTER_DSN}" ] && [ -x /usr/local/etc/rc.d/postgres_exporter ]; then
     sysrc postgres_exporter_enable=YES >/dev/null
 fi
 
 install -d -m 0755 /usr/local/jails
 
-for j in postgres kea node_exporter prometheus postgres_exporter grafana; do
+for j in postgres kea node_exporter prometheus postgres_exporter grafana loki; do
     install -d -m 0755 "/usr/local/jails/$j/dev"
     install -d -m 0755 "/usr/local/jails/$j/etc"
 done
@@ -128,6 +141,10 @@ node_exporter {
 }
 
 postgres_exporter {
+    ip4.addr = 127.0.0.1;
+}
+
+loki {
     ip4.addr = 127.0.0.1;
 }
 EOF

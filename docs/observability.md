@@ -4,23 +4,26 @@
 
 ```text
 node_exporter 127.0.0.1:9100 ----+
-postgres_exporter 127.0.0.1:9187 +--> Prometheus 127.0.0.1:9090
-Prometheus self-metrics ----------+              |
-                                                 v
-                                      Grafana 10.0.10.2:3000
+postgres_exporter 127.0.0.1:9187 +--> Prometheus 127.0.0.1:9090 --+
+Prometheus self-metrics ----------+                              |
+                                                                 v
+Loki 127.0.0.1:3100 ------------------------------------> Grafana 10.0.10.2:3000
 ```
 
-Prometheus and both exporters bind to loopback. Grafana is the only component exposed on the management VLAN. PF permits TCP/3000 only from `mgmt_net`.
+Prometheus, Loki, and both exporters bind to loopback. Grafana is the only component exposed on the management VLAN. PF permits TCP/3000 only from `mgmt_net`.
 
 ## Install configuration
 
 ```sh
 install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml
+install -m 0644 config/loki.yml /usr/local/etc/loki.yml
 install -m 0644 config/grafana.ini /usr/local/etc/grafana/grafana.ini
 install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources
 install -d -m 0755 /usr/local/etc/grafana/provisioning/dashboards/json
 install -m 0644 config/grafana/provisioning/datasources/prometheus.yml \
   /usr/local/etc/grafana/provisioning/datasources/prometheus.yml
+install -m 0644 config/grafana/provisioning/datasources/loki.yml \
+  /usr/local/etc/grafana/provisioning/datasources/loki.yml
 install -m 0644 config/grafana/provisioning/dashboards/default.yml \
   /usr/local/etc/grafana/provisioning/dashboards/default.yml
 ```
@@ -46,6 +49,7 @@ sh scripts/start_services.sh
 # or manage individual containers:
 container list
 container start prometheus
+container start loki
 container start grafana
 ```
 
@@ -53,10 +57,11 @@ container start grafana
 
 ```sh
 promtool check config /usr/local/etc/prometheus.yml
-sockstat -4 -6 -l | egrep ':(3000|9090|9100|9187)'
+sockstat -4 -6 -l | egrep ':(3000|3100|9090|9100|9187)'
 fetch -qo- http://127.0.0.1:9100/metrics | head
 fetch -qo- http://127.0.0.1:9187/metrics | head
 fetch -qo- http://127.0.0.1:9090/-/ready
+fetch -qo- http://127.0.0.1:3100/ready
 grafana cli --config /usr/local/etc/grafana/grafana.ini admin reset-admin-password 'REPLACE-ME'
 ```
 
@@ -64,6 +69,7 @@ Expected bindings:
 
 - Grafana: management address, TCP/3000
 - Prometheus: `127.0.0.1:9090`
+- Loki: `127.0.0.1:3100`
 - node_exporter: `127.0.0.1:9100`
 - postgres_exporter: `127.0.0.1:9187`
 
