@@ -50,8 +50,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (level) (count_over_time({job=~\".+\"} [$__interval])) or sum(count_over_time({job=~\".+\"} [$__interval]))",
-          "legendFormat": "{{level}}",
+          "expr": "sum by (job) (count_over_time({job=~\".+\"} [$__interval])) or sum(count_over_time({job=~\".+\"} [$__interval]))",
+          "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
@@ -95,8 +95,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (level) (count_over_time({job=~\".+\"} |~ \"(?i)error|fail|fatal|warn\" [$__interval]))",
-          "legendFormat": "Errors & Warnings ({{level}})",
+          "expr": "sum by (job) (count_over_time({job=~\".+\"} |~ \"(?i)(error|fail|fatal|warn)\" [$__interval]))",
+          "legendFormat": "{{job}} errors/warnings",
           "refId": "A"
         }
       ],
@@ -126,7 +126,7 @@
       },
       "targets": [
         {
-          "expr": "{job=~\".+\"} |~ \"$search\"",
+          "expr": "{job=~\".+\"} |= \"$search\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -165,6 +165,6 @@
   "timezone": "browser",
   "title": "Control Plane Logs",
   "uid": "control-plane-logs",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
