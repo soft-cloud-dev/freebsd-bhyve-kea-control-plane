@@ -462,24 +462,29 @@
       },
       "targets": [
         {
-          "expr": "rate(node_netstat_Tcp_InSegs[5m]) + rate(node_netstat_Tcp_OutSegs[5m]) or rate(node_network_protocol_packets_total{protocol=\"tcp\"}[5m]) or sum(rate(node_network_receive_packets_total[5m])) or vector(0)",
+          "expr": "rate(node_netstat_Tcp_InSegs[5m]) + rate(node_netstat_Tcp_OutSegs[5m]) or rate(node_network_protocol_packets_total{protocol=\"tcp\"}[5m])",
           "legendFormat": "TCP",
           "refId": "A"
         },
         {
-          "expr": "rate(node_netstat_Udp_InDatagrams[5m]) + rate(node_netstat_Udp_OutDatagrams[5m]) or rate(node_network_protocol_packets_total{protocol=\"udp\"}[5m]) or vector(0)",
+          "expr": "rate(node_netstat_Udp_InDatagrams[5m]) + rate(node_netstat_Udp_OutDatagrams[5m]) or rate(node_network_protocol_packets_total{protocol=\"udp\"}[5m])",
           "legendFormat": "UDP",
           "refId": "B"
         },
         {
-          "expr": "rate(node_netstat_Icmp_InMsgs[5m]) + rate(node_netstat_Icmp_OutMsgs[5m]) or rate(node_network_protocol_packets_total{protocol=\"icmp\"}[5m]) or vector(0)",
+          "expr": "rate(node_netstat_Icmp_InMsgs[5m]) + rate(node_netstat_Icmp_OutMsgs[5m]) or rate(node_network_protocol_packets_total{protocol=\"icmp\"}[5m])",
           "legendFormat": "ICMP",
           "refId": "C"
         },
         {
-          "expr": "rate(node_network_protocol_packets_total[5m]) or vector(0)",
+          "expr": "rate(node_network_protocol_packets_total[5m])",
           "legendFormat": "{{protocol}}",
           "refId": "D"
+        },
+        {
+          "expr": "sum by (device) (rate(node_network_receive_packets_total[5m]))",
+          "legendFormat": "RX {{device}}",
+          "refId": "E"
         }
       ],
       "title": "Network Packets by Protocol",
@@ -513,14 +518,24 @@
       },
       "targets": [
         {
-          "expr": "rate(node_network_port_packets_total[5m]) or rate(pf_rule_packets_total[5m]) or sum by (device) (rate(node_network_transmit_packets_total[5m])) or vector(0)",
+          "expr": "rate(node_network_port_packets_total[5m])",
           "legendFormat": "{{protocol}}/{{port}} ({{service}})",
           "refId": "A"
         },
         {
-          "expr": "rate(pf_rule_packets_total[5m]) or vector(0)",
+          "expr": "rate(pf_rule_packets_total[5m])",
           "legendFormat": "PF rule {{rule}} ({{proto}}/{{port}})",
           "refId": "B"
+        },
+        {
+          "expr": "sum by (device) (rate(node_network_transmit_packets_total[5m]))",
+          "legendFormat": "TX {{device}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (device) (rate(node_network_receive_packets_total[5m]))",
+          "legendFormat": "RX {{device}}",
+          "refId": "D"
         }
       ],
       "title": "Network Packets by Port",
