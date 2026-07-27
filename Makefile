@@ -28,7 +28,7 @@ KEA_API_PASSWORD_FILE ?= /usr/local/etc/kea/kea-api-password
 POSTGRES_EXPORTER_DSN ?=
 PF_ROLLBACK_TIMEOUT ?= 120
 
-SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/init_postgresql.sh scripts/init_vm.sh scripts/lib.sh scripts/provision_vm.sh scripts/rollback_vm.sh scripts/start_services.sh
+SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/export_pf_metrics.sh scripts/init_postgresql.sh scripts/init_vm.sh scripts/lib.sh scripts/provision_vm.sh scripts/rollback_vm.sh scripts/start_services.sh
 TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_observability.sh
 
 .NOTPARALLEL:
