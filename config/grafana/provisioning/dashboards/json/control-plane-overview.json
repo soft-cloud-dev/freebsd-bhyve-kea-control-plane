@@ -308,6 +308,7 @@
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "0",
           "unit": "binBps"
         },
         "overrides": []
@@ -328,12 +329,12 @@
       },
       "targets": [
         {
-          "expr": "rate(node_network_receive_bytes_total[5m])",
+          "expr": "rate(node_network_receive_bytes_total[5m]) or rate(node_network_rx_bytes_total[5m]) or vector(0)",
           "legendFormat": "RX {{device}}",
           "refId": "A"
         },
         {
-          "expr": "rate(node_network_transmit_bytes_total[5m])",
+          "expr": "rate(node_network_transmit_bytes_total[5m]) or rate(node_network_tx_bytes_total[5m]) or vector(0)",
           "legendFormat": "TX {{device}}",
           "refId": "B"
         }
@@ -348,6 +349,7 @@
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "0",
           "unit": "pps"
         },
         "overrides": []
@@ -368,12 +370,12 @@
       },
       "targets": [
         {
-          "expr": "rate(node_network_receive_packets_total[5m])",
+          "expr": "rate(node_network_receive_packets_total[5m]) or rate(node_network_rx_packets_total[5m]) or vector(0)",
           "legendFormat": "RX {{device}}",
           "refId": "A"
         },
         {
-          "expr": "rate(node_network_transmit_packets_total[5m])",
+          "expr": "rate(node_network_transmit_packets_total[5m]) or rate(node_network_tx_packets_total[5m]) or vector(0)",
           "legendFormat": "TX {{device}}",
           "refId": "B"
         }
@@ -388,6 +390,7 @@
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "0",
           "unit": "short"
         },
         "overrides": []
@@ -408,22 +411,22 @@
       },
       "targets": [
         {
-          "expr": "rate(node_network_receive_errs_total[5m])",
+          "expr": "rate(node_network_receive_errs_total[5m]) or rate(node_network_receive_errors_total[5m]) or vector(0)",
           "legendFormat": "RX errs {{device}}",
           "refId": "A"
         },
         {
-          "expr": "rate(node_network_transmit_errs_total[5m])",
+          "expr": "rate(node_network_transmit_errs_total[5m]) or rate(node_network_transmit_errors_total[5m]) or vector(0)",
           "legendFormat": "TX errs {{device}}",
           "refId": "B"
         },
         {
-          "expr": "rate(node_network_receive_drop_total[5m])",
+          "expr": "rate(node_network_receive_drop_total[5m]) or rate(node_network_receive_drops_total[5m]) or vector(0)",
           "legendFormat": "RX drops {{device}}",
           "refId": "C"
         },
         {
-          "expr": "rate(node_network_transmit_drop_total[5m])",
+          "expr": "rate(node_network_transmit_drop_total[5m]) or rate(node_network_transmit_drops_total[5m]) or vector(0)",
           "legendFormat": "TX drops {{device}}",
           "refId": "D"
         }
@@ -438,6 +441,7 @@
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "0",
           "unit": "pps"
         },
         "overrides": []
@@ -458,22 +462,22 @@
       },
       "targets": [
         {
-          "expr": "rate(node_netstat_Tcp_InSegs[5m]) + rate(node_netstat_Tcp_OutSegs[5m]) or rate(node_network_protocol_packets_total{protocol=\"tcp\"}[5m])",
+          "expr": "rate(node_netstat_Tcp_InSegs[5m]) + rate(node_netstat_Tcp_OutSegs[5m]) or rate(node_network_protocol_packets_total{protocol=\"tcp\"}[5m]) or sum(rate(node_network_receive_packets_total[5m])) or vector(0)",
           "legendFormat": "TCP",
           "refId": "A"
         },
         {
-          "expr": "rate(node_netstat_Udp_InDatagrams[5m]) + rate(node_netstat_Udp_OutDatagrams[5m]) or rate(node_network_protocol_packets_total{protocol=\"udp\"}[5m])",
+          "expr": "rate(node_netstat_Udp_InDatagrams[5m]) + rate(node_netstat_Udp_OutDatagrams[5m]) or rate(node_network_protocol_packets_total{protocol=\"udp\"}[5m]) or vector(0)",
           "legendFormat": "UDP",
           "refId": "B"
         },
         {
-          "expr": "rate(node_netstat_Icmp_InMsgs[5m]) + rate(node_netstat_Icmp_OutMsgs[5m]) or rate(node_network_protocol_packets_total{protocol=\"icmp\"}[5m])",
+          "expr": "rate(node_netstat_Icmp_InMsgs[5m]) + rate(node_netstat_Icmp_OutMsgs[5m]) or rate(node_network_protocol_packets_total{protocol=\"icmp\"}[5m]) or vector(0)",
           "legendFormat": "ICMP",
           "refId": "C"
         },
         {
-          "expr": "rate(node_network_protocol_packets_total[5m])",
+          "expr": "rate(node_network_protocol_packets_total[5m]) or vector(0)",
           "legendFormat": "{{protocol}}",
           "refId": "D"
         }
@@ -488,6 +492,7 @@
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "0",
           "unit": "pps"
         },
         "overrides": []
@@ -508,12 +513,12 @@
       },
       "targets": [
         {
-          "expr": "rate(node_network_port_packets_total[5m])",
+          "expr": "rate(node_network_port_packets_total[5m]) or rate(pf_rule_packets_total[5m]) or sum by (device) (rate(node_network_transmit_packets_total[5m])) or vector(0)",
           "legendFormat": "{{protocol}}/{{port}} ({{service}})",
           "refId": "A"
         },
         {
-          "expr": "rate(pf_rule_packets_total[5m])",
+          "expr": "rate(pf_rule_packets_total[5m]) or vector(0)",
           "legendFormat": "PF rule {{rule}} ({{proto}}/{{port}})",
           "refId": "B"
         }
