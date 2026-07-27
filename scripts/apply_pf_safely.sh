@@ -73,9 +73,9 @@ case "${MODE}" in
             printf '%s\n' no > "${PF_WAS_ENABLED_FILE}"
         fi
 
-        nohup sh "$0" rollback-after-timeout \
-            > "${PF_ROLLBACK_LOG}" 2>&1 < /dev/null &
-        printf '%s\n' "$!" > "${PF_ROLLBACK_PID}"
+        (nohup sh "$0" rollback-after-timeout \
+            > "${PF_ROLLBACK_LOG}" 2>&1 < /dev/null & echo $! > "${PF_ROLLBACK_PID}")
+
 
         if pf_is_enabled; then
             pfctl -f "${PF_CONF}"
