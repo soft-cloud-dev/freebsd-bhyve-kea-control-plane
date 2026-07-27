@@ -3,6 +3,7 @@ set -eu
 
 . "$(dirname "$0")/lib.sh"
 require_root
+require_commands jq
 
 EXT_IF="${EXT_IF:-igb0}"
 MGMT_IF="${MGMT_IF:-vlan10}"
@@ -43,7 +44,12 @@ if [ ! -s "${KEA_API_PASSWORD_FILE}" ]; then
 fi
 chmod 0600 "${KEA_API_USER_FILE}" "${KEA_API_PASSWORD_FILE}"
 
-sed "s|\"interfaces\": \[ \"[^\"]*\" \]|\"interfaces\": [ \"${LAN_IF}\" ]|" config/kea-dhcp4.conf > "$kea_tmp"
+kea_existing=""
+if [ -r /usr/local/etc/kea/kea-dhcp4.conf ]; then
+    kea_existing=/usr/local/etc/kea/kea-dhcp4.conf
+fi
+sh scripts/render_kea_config.sh \
+    config/kea-dhcp4.conf "$LAN_IF" "$kea_existing" > "$kea_tmp"
 if command -v kea-dhcp4 >/dev/null 2>&1; then
     kea-dhcp4 -t "$kea_tmp"
 fi
@@ -174,5 +180,4 @@ promtail {
 EOF
 
 echo "[+] Control plane service configurations updated for FreeBSD Jail / container runtime."
-
 
