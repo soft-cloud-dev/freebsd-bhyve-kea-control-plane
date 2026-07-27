@@ -5,17 +5,78 @@ PGDATABASE="${PGDATABASE:-inventory}"
 PGUSER="${PGUSER:-postgres}"
 KEA_CA_URL="${KEA_CA_URL:-http://127.0.0.1:8000/}"
 VM_OWNER="${VM_OWNER:-admin}"
+CLOUD_INIT_USER="${CLOUD_INIT_USER:-${VM_OWNER}}"
+SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE:-}"
+SSH_AUTHORIZED_KEY="${SSH_AUTHORIZED_KEY:-}"
 IPAM_POOL="${IPAM_POOL:-vm-lan}"
 VM_DATASET="${VM_DATASET:-zroot/vm}"
+VM_ROOT="${VM_ROOT:-}"
 
 usage() {
-    echo "Usage: $0 <vm_name> <template>" >&2
+    cat >&2 <<EOF
+Usage: $0 <vm_name> <template>
+
+Required cloud-init key input:
+  SSH_PUBLIC_KEY_FILE=/path/to/id_ed25519.pub
+or:
+  SSH_AUTHORIZED_KEY='ssh-ed25519 AAAA... comment'
+EOF
     exit 64
 }
 
 die() {
     echo "ERROR: $*" >&2
     exit 1
+}
+
+sql_literal() {
+    printf '%s' "$1" | sed "s/'/''/g"
+}
+
+yaml_single_quote() {
+    printf '%s' "$1" | sed "s/'/''/g"
+}
+
+resolve_ssh_key() {
+    if [ -n "$SSH_PUBLIC_KEY_FILE" ]; then
+        [ -r "$SSH_PUBLIC_KEY_FILE" ] || die "SSH public key file is not readable: $SSH_PUBLIC_KEY_FILE"
+        awk 'NF { print; exit }' "$SSH_PUBLIC_KEY_FILE"
+        return
+    fi
+
+    [ -n "$SSH_AUTHORIZED_KEY" ] || die "set SSH_PUBLIC_KEY_FILE or SSH_AUTHORIZED_KEY"
+    printf '%s\n' "$SSH_AUTHORIZED_KEY"
+}
+
+resolve_vm_root() {
+    if [ -n "$VM_ROOT" ]; then
+        printf '%s\n' "$VM_ROOT"
+        return
+    fi
+
+    mountpoint=$(zfs get -H -o value mountpoint "$VM_DATASET")
+    case "$mountpoint" in
+        ''|none|legacy) die "set VM_ROOT; ${VM_DATASET} has mountpoint ${mountpoint:-unset}" ;;
+    esac
+    printf '%s\n' "$mountpoint"
+}
+
+create_seed_iso() {
+    seed_source=$1
+    seed_output=$2
+
+    rm -f "$seed_output"
+    if command -v makefs >/dev/null 2>&1; then
+        makefs -t cd9660 -o rockridge,label=cidata "$seed_output" "$seed_source"
+    elif command -v genisoimage >/dev/null 2>&1; then
+        (
+            cd "$seed_source"
+            genisoimage -quiet -output "$seed_output" -volid cidata -joliet -rock meta-data user-data
+        )
+    else
+        die "neither makefs nor genisoimage is available"
+    fi
+    chmod 0644 "$seed_output"
 }
 
 [ "$#" -eq 2 ] || usage
@@ -28,27 +89,40 @@ esac
 case "$TEMPLATE" in
     *[!A-Za-z0-9._/-]*|'') die "invalid template name" ;;
 esac
+case "$CLOUD_INIT_USER" in
+    ''|*[!a-z0-9_-]*|[0-9-]*) die "invalid cloud-init user: $CLOUD_INIT_USER" ;;
+esac
 
-for command in vm psql curl jq; do
+for command in vm psql curl jq zfs mktemp; do
     command -v "$command" >/dev/null 2>&1 || die "missing command: $command"
 done
+
+SSH_KEY=$(resolve_ssh_key)
+case "$SSH_KEY" in
+    "ssh-ed25519 "*|"sk-ssh-ed25519@openssh.com "*) ;;
+    *) die "cloud-init key must be an Ed25519 OpenSSH public key" ;;
+esac
+
+VM_ROOT=$(resolve_vm_root)
+VM_DIR="${VM_ROOT%/}/${VM_NAME}"
 
 created_vm=0
 inserted_vm=0
 kea_reserved=0
+seed_dir=""
 MAC_ADDRESS=""
 IP_ADDRESS=""
 POOL_ID=""
 KEA_SUBNET_ID=""
 VLAN=""
 
-sql_literal() {
-    printf "%s" "$1" | sed "s/'/''/g"
-}
-
 rollback() {
     status=$?
     trap - EXIT INT TERM HUP
+
+    if [ -n "$seed_dir" ] && [ -d "$seed_dir" ]; then
+        rm -rf "$seed_dir"
+    fi
 
     if [ "$status" -ne 0 ]; then
         echo "[!] Provisioning failed; rolling back" >&2
@@ -84,11 +158,12 @@ SQL
 }
 trap rollback EXIT INT TERM HUP
 
-echo "[1/6] Creating VM"
+echo "[1/7] Creating VM"
 vm create -t "$TEMPLATE" "$VM_NAME"
 created_vm=1
+[ -d "$VM_DIR" ] || die "vm-bhyve guest directory not found: $VM_DIR"
 
-echo "[2/6] Reading VM MAC address"
+echo "[2/7] Reading VM MAC address"
 MAC_ADDRESS=$(vm info "$VM_NAME" | awk '
     BEGIN { IGNORECASE=1 }
     /mac/ {
@@ -102,7 +177,34 @@ MAC_ADDRESS=$(vm info "$VM_NAME" | awk '
 ')
 [ -n "$MAC_ADDRESS" ] || die "could not determine VM MAC address"
 
-echo "[3/6] Allocating address and recording inventory"
+echo "[3/7] Creating cloud-init NoCloud seed"
+seed_dir=$(mktemp -d "${TMPDIR:-/tmp}/${VM_NAME}.cloud-init.XXXXXX")
+cat > "${seed_dir}/meta-data" <<EOF
+instance-id: ${VM_NAME}
+local-hostname: ${VM_NAME}
+EOF
+
+cloud_user=$(yaml_single_quote "$CLOUD_INIT_USER")
+cloud_key=$(yaml_single_quote "$SSH_KEY")
+cat > "${seed_dir}/user-data" <<EOF
+#cloud-config
+users:
+  - default
+  - name: '${cloud_user}'
+    lock_passwd: true
+    shell: /bin/sh
+    ssh_authorized_keys:
+      - '${cloud_key}'
+EOF
+
+if command -v cloud-init >/dev/null 2>&1; then
+    cloud-init schema -c "${seed_dir}/user-data" >/dev/null
+fi
+create_seed_iso "$seed_dir" "${VM_DIR}/seed.iso"
+rm -rf "$seed_dir"
+seed_dir=""
+
+echo "[4/7] Allocating address and recording inventory"
 escaped_name=$(sql_literal "$VM_NAME")
 escaped_owner=$(sql_literal "$VM_OWNER")
 escaped_template=$(sql_literal "$TEMPLATE")
@@ -138,7 +240,7 @@ EOF
 [ -n "$IP_ADDRESS" ] || die "database did not return an IP address"
 inserted_vm=1
 
-echo "[4/6] Adding Kea reservation"
+echo "[5/7] Adding Kea reservation"
 payload=$(jq -n \
     --arg mac "$MAC_ADDRESS" \
     --arg ip "$IP_ADDRESS" \
@@ -150,10 +252,10 @@ result=$(printf '%s' "$response" | jq -er '.[0].result')
 [ "$result" -eq 0 ] || die "Kea rejected reservation: $response"
 kea_reserved=1
 
-echo "[5/6] Starting VM"
+echo "[6/7] Starting VM"
 vm start "$VM_NAME"
 
-echo "[6/6] Marking VM running"
+echo "[7/7] Marking VM running"
 psql -X -v ON_ERROR_STOP=1 -qAt <<SQL >/dev/null
 UPDATE vms
    SET status = 'running', last_error = NULL
