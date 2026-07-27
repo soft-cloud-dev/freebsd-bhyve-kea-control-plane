@@ -480,11 +480,6 @@
           "expr": "rate(node_network_protocol_packets_total[5m])",
           "legendFormat": "{{protocol}}",
           "refId": "D"
-        },
-        {
-          "expr": "sum by (device) (rate(node_network_receive_packets_total[5m]))",
-          "legendFormat": "RX {{device}}",
-          "refId": "E"
         }
       ],
       "title": "Network Packets by Protocol",
@@ -526,16 +521,6 @@
           "expr": "rate(pf_rule_packets_total[5m])",
           "legendFormat": "PF rule {{rule}} ({{proto}}/{{port}})",
           "refId": "B"
-        },
-        {
-          "expr": "sum by (device) (rate(node_network_transmit_packets_total[5m]))",
-          "legendFormat": "TX {{device}}",
-          "refId": "C"
-        },
-        {
-          "expr": "sum by (device) (rate(node_network_receive_packets_total[5m]))",
-          "legendFormat": "RX {{device}}",
-          "refId": "D"
         }
       ],
       "title": "Network Packets by Port",
