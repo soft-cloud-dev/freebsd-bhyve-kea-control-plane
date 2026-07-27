@@ -89,7 +89,17 @@ configure-services:
 	install -m 0644 config/grafana/provisioning/datasources/prometheus.yml /usr/local/etc/grafana/provisioning/datasources/prometheus.yml; \
 	install -m 0644 config/grafana/provisioning/dashboards/default.yml /usr/local/etc/grafana/provisioning/dashboards/default.yml; \
 	for dashboard in config/grafana/provisioning/dashboards/json/*.json; do [ -e "$$dashboard" ] || continue; install -m 0644 "$$dashboard" /usr/local/etc/grafana/provisioning/dashboards/json/; done; \
-	sysrc pf_enable=YES pflog_enable=YES kea_dhcp4_enable=YES >/dev/null; \
+	sysrc pf_enable=YES pflog_enable=YES >/dev/null; \
+	if [ -x /usr/local/etc/rc.d/kea ]; then \
+	  sysrc kea_enable=YES >/dev/null; \
+	  sysrc -x kea_dhcp4_enable >/dev/null 2>&1 || true; \
+	elif [ -x /usr/local/etc/rc.d/kea_dhcp4 ]; then \
+	  sysrc kea_dhcp4_enable=YES >/dev/null; \
+	  sysrc -x kea_enable >/dev/null 2>&1 || true; \
+	else \
+	  echo 'ERROR: no Kea rc service found in /usr/local/etc/rc.d' >&2; \
+	  exit 1; \
+	fi; \
 	sysrc -x kea_ctrl_agent_enable >/dev/null 2>&1 || true; \
 	sysrc prometheus_enable=YES prometheus_config=/usr/local/etc/prometheus.yml prometheus_args='--web.listen-address=127.0.0.1:9090' >/dev/null; \
 	sysrc node_exporter_enable=YES node_exporter_listen_address=127.0.0.1:9100 >/dev/null; \
@@ -120,7 +130,16 @@ init-vm:
 
 start-services:
 	@service pf status >/dev/null 2>&1 && service pf reload || service pf start
-	@service kea_dhcp4 restart 2>/dev/null || service kea_dhcp4 start
+	@set -eu; \
+	if [ -x /usr/local/etc/rc.d/kea ]; then \
+	  kea_service=kea; \
+	elif [ -x /usr/local/etc/rc.d/kea_dhcp4 ]; then \
+	  kea_service=kea_dhcp4; \
+	else \
+	  echo 'ERROR: no Kea rc service found in /usr/local/etc/rc.d' >&2; \
+	  exit 1; \
+	fi; \
+	service "$$kea_service" restart 2>/dev/null || service "$$kea_service" start
 	@service node_exporter restart 2>/dev/null || service node_exporter start
 	@service prometheus restart 2>/dev/null || service prometheus start
 	@if [ "$$(sysrc -n postgres_exporter_enable 2>/dev/null || true)" = YES ]; then service postgres_exporter restart 2>/dev/null || service postgres_exporter start; fi
