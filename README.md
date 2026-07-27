@@ -82,11 +82,7 @@ Review all interface names, networks, package versions, service paths, database 
 su -
 sh scripts/02_install_dependencies.sh
 sh scripts/01_host_setup.sh
-install -m 0600 config/pf.conf /etc/pf.conf
-install -m 0644 config/kea-dhcp4.conf /usr/local/etc/kea/kea-dhcp4.conf
-install -m 0644 config/kea-ctrl-agent.conf /usr/local/etc/kea/kea-ctrl-agent.conf
-install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml
-install -m 0644 config/grafana.ini /usr/local/etc/grafana/grafana.ini
+sh scripts/configure_services.sh
 pfctl -nf /etc/pf.conf
 kea-dhcp4 -t /usr/local/etc/kea/kea-dhcp4.conf
 kea-ctrl-agent -t /usr/local/etc/kea/kea-ctrl-agent.conf
@@ -96,11 +92,7 @@ promtool check config /usr/local/etc/prometheus.yml
 Initialize PostgreSQL and inventory:
 
 ```sh
-service postgresql initdb
-service postgresql start
-sudo -u postgres createdb inventory
-sudo -u postgres psql -d inventory -f db/001_inventory.sql
-sudo -u postgres psql -d inventory -f db/002_monitoring.sql
+sh scripts/init_postgresql.sh
 sudo -u postgres psql -d inventory <<'SQL'
 INSERT INTO ipam_pools(name, subnet, first_host, last_host, vlan, kea_subnet_id)
 VALUES ('vm-lan', '10.0.20.0/24', '10.0.20.10', '10.0.20.99', 20, 1)
@@ -128,21 +120,23 @@ The complete sequence is documented in `docs/installation.md` and `docs/observab
 
 ## Provisioning
 
+`vm-bhyve` and ZFS dataset administration require root privileges (via `sudo` or `su -`):
+
 ```sh
 chmod 0750 scripts/*.sh tests/*.sh
-PGDATABASE=inventory \
-PGUSER=postgres \
-IPAM_POOL=vm-lan \
-VM_OWNER=admin \
-CLOUD_INIT_USER=admin \
-SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
-sh scripts/provision_vm.sh db-node-01 freebsd
+sudo PGDATABASE=inventory \
+  PGUSER=postgres \
+  IPAM_POOL=vm-lan \
+  VM_OWNER=admin \
+  CLOUD_INIT_USER=admin \
+  SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
+  sh scripts/provision_vm.sh db-node-01 freebsd
 ```
 
 Deprovision:
 
 ```sh
-PGDATABASE=inventory PGUSER=postgres sh scripts/rollback_vm.sh db-node-01
+sudo PGDATABASE=inventory PGUSER=postgres sh scripts/rollback_vm.sh db-node-01
 ```
 
 ## Validation
@@ -159,7 +153,9 @@ service grafana status
 
 ## Known boundaries
 
+- `vm-bhyve` and ZFS administration operations require `root` privileges.
 - The `vm info` parser is isolated but still depends on human-readable `vm-bhyve` output.
+- Kea DHCP reservations are updated dynamically in active server memory and written to disk via Control Agent API (`config-get`/`config-set`/`config-write`), avoiding dependency on external SQL host database hook plugins.
 - `xattr=sa` is attempted and falls back to `xattr=on` when unsupported.
 - `volblocksize` is a zvol creation-time property and must be selected in each VM/template provisioning path.
 - Grafana is configured for management-network HTTP initially; production TLS and secure cookies require site-specific hostname and certificate decisions.
