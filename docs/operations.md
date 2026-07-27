@@ -2,15 +2,32 @@
 
 ## Provision a VM
 
+The provisioner creates a NoCloud seed ISO containing the VM identity, local hostname, management user, and trusted Ed25519 SSH public key. Supply the key through a file where possible so it does not enter shell history.
+
 ```sh
 PGDATABASE=inventory \
 PGUSER=postgres \
 IPAM_POOL=vm-lan \
 VM_OWNER=admin \
+CLOUD_INIT_USER=admin \
+SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
 sh scripts/provision_vm.sh db-node-01 freebsd
 ```
 
-The operation succeeds only after the VM starts and the inventory row is marked `running`. Earlier failures trigger compensating cleanup of Kea, PostgreSQL, IPAM, and vm-bhyve state.
+For automation, `SSH_AUTHORIZED_KEY` may contain the complete public-key line directly.
+
+The operation succeeds only after:
+
+1. vm-bhyve creates the guest;
+2. a `cidata` NoCloud seed ISO is created as `seed.iso` in the guest directory;
+3. PostgreSQL allocates and records the address;
+4. Kea accepts the reservation;
+5. the VM starts; and
+6. the inventory row is marked `running`.
+
+Earlier failures trigger compensating cleanup of temporary seed inputs, Kea, PostgreSQL, IPAM, and vm-bhyve state.
+
+The guest image must include cloud-init with the NoCloud datasource enabled. The selected vm-bhyve template must attach `seed.iso` as a CD-ROM.
 
 ## Remove a VM
 
@@ -20,7 +37,7 @@ PGUSER=postgres \
 sh scripts/rollback_vm.sh db-node-01
 ```
 
-The command removes the Kea reservation first, destroys the guest, archives the inventory row, and releases the address.
+The command removes the Kea reservation first, destroys the guest and its seed ISO, archives the inventory row, and releases the address.
 
 ## Inspect state
 
