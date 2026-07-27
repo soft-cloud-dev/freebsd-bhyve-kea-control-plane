@@ -28,7 +28,7 @@ sysrc vm_enable=YES >/dev/null
 sysrc vm_dir="zfs:zroot/vm" >/dev/null
 sysrc postgresql_enable=YES >/dev/null
 sysrc kea_dhcp4_enable=YES >/dev/null
-sysrc kea_ctrl_agent_enable=YES >/dev/null
+sysrc -x kea_ctrl_agent_enable >/dev/null 2>&1 || true
 sysrc pf_enable=YES >/dev/null
 sysrc pflog_enable=YES >/dev/null
 sysrc prometheus_enable=YES >/dev/null
@@ -41,4 +41,4 @@ sysrc postgres_exporter_listen_address="127.0.0.1:9187" >/dev/null
 sysrc grafana_enable=YES >/dev/null
 sysrc grafana_config="/usr/local/etc/grafana/grafana.ini" >/dev/null
 
-echo "Dependencies installed. Review config/, credentials, and interface bindings before starting services."
+echo "Dependencies installed. Kea DHCP4 exposes its management API on 127.0.0.1:8000."
