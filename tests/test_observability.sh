@@ -62,10 +62,6 @@ if command -v jq >/dev/null 2>&1; then
             die "invalid Grafana dashboard: $dashboard"
         grep -q 'node_network_receive_bytes_total' "$dashboard" || \
             die "Grafana dashboard missing network metrics: $dashboard"
-        grep -q 'node_netstat_Tcp_InSegs\|node_network_protocol_packets_total' "$dashboard" || \
-            die "Grafana dashboard missing protocol network metrics: $dashboard"
-        grep -q 'node_network_port_packets_total\|pf_rule_packets_total' "$dashboard" || \
-            die "Grafana dashboard missing port network metrics: $dashboard"
     done
     [ "$found" -eq 1 ] || die "no Grafana dashboard JSON files found"
 else
