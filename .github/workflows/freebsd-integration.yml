@@ -1,0 +1,157 @@
+name: FreeBSD Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: freebsd-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freebsd-kea:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run FreeBSD integration tests
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          copyback: false
+          prepare: |
+            set -eu
+            pkg install -y bash curl jq kea gmake shellcheck
+            install -d -m 0755 /var/run/kea /var/db/kea /usr/local/etc/kea
+          run: |
+            set -eu
+            gmake lint
+
+            cat > /usr/local/etc/kea/kea-dhcp4-ci.conf <<'JSON'
+            {
+              "Dhcp4": {
+                "interfaces-config": {
+                  "interfaces": [ "lo0" ]
+                },
+                "control-socket": {
+                  "socket-type": "unix",
+                  "socket-name": "/var/run/kea/kea4-ci.sock"
+                },
+                "hooks-libraries": [
+                  {
+                    "library": "/usr/local/lib/kea/hooks/libdhcp_host_cmds.so"
+                  }
+                ],
+                "lease-database": {
+                  "type": "memfile",
+                  "persist": false,
+                  "name": "/var/db/kea/kea-leases4-ci.csv"
+                },
+                "subnet4": [
+                  {
+                    "id": 1,
+                    "subnet": "127.10.0.0/24",
+                    "pools": [
+                      { "pool": "127.10.0.100 - 127.10.0.200" }
+                    ]
+                  }
+                ]
+              }
+            }
+            JSON
+
+            cat > /usr/local/etc/kea/kea-ctrl-agent-ci.conf <<'JSON'
+            {
+              "Control-agent": {
+                "http-host": "127.0.0.1",
+                "http-port": 18000,
+                "control-sockets": {
+                  "dhcp4": {
+                    "socket-type": "unix",
+                    "socket-name": "/var/run/kea/kea4-ci.sock"
+                  }
+                }
+              }
+            }
+            JSON
+
+            kea-dhcp4 -t /usr/local/etc/kea/kea-dhcp4-ci.conf
+            kea-ctrl-agent -t /usr/local/etc/kea/kea-ctrl-agent-ci.conf
+
+            daemon -p /tmp/kea-dhcp4-ci.pid -f \
+              /usr/local/sbin/kea-dhcp4 -c /usr/local/etc/kea/kea-dhcp4-ci.conf
+            daemon -p /tmp/kea-ca-ci.pid -f \
+              /usr/local/sbin/kea-ctrl-agent -c /usr/local/etc/kea/kea-ctrl-agent-ci.conf
+
+            cleanup() {
+              [ -f /tmp/kea-ca-ci.pid ] && kill "$(cat /tmp/kea-ca-ci.pid)" 2>/dev/null || true
+              [ -f /tmp/kea-dhcp4-ci.pid ] && kill "$(cat /tmp/kea-dhcp4-ci.pid)" 2>/dev/null || true
+            }
+            trap cleanup EXIT HUP INT TERM
+
+            i=0
+            until curl -fsS -H 'Content-Type: application/json' \
+              -d '{"command":"status-get","service":["dhcp4"]}' \
+              http://127.0.0.1:18000/ >/tmp/kea-status.json; do
+              i=$((i + 1))
+              [ "$i" -lt 30 ] || {
+                echo 'Kea Control Agent did not become ready' >&2
+                exit 1
+              }
+              sleep 1
+            done
+            jq -e '.[0].result == 0' /tmp/kea-status.json
+
+            reservation_payload=$(jq -n '{
+              command:"reservation-add",
+              service:["dhcp4"],
+              arguments:{
+                reservation:{
+                  "subnet-id":1,
+                  "hw-address":"02:00:00:00:00:10",
+                  "ip-address":"127.10.0.10",
+                  "hostname":"ci-vm"
+                }
+              }
+            }')
+            curl -fsS -H 'Content-Type: application/json' \
+              -d "$reservation_payload" \
+              http://127.0.0.1:18000/ >/tmp/kea-add.json
+            jq -e '.[0].result == 0' /tmp/kea-add.json
+
+            get_payload=$(jq -n '{
+              command:"reservation-get",
+              service:["dhcp4"],
+              arguments:{
+                "subnet-id":1,
+                "identifier-type":"hw-address",
+                identifier:"02:00:00:00:00:10"
+              }
+            }')
+            curl -fsS -H 'Content-Type: application/json' \
+              -d "$get_payload" \
+              http://127.0.0.1:18000/ >/tmp/kea-get.json
+            jq -e '.[0].result == 0' /tmp/kea-get.json
+            jq -e '.[0].arguments."ip-address" == "127.10.0.10"' /tmp/kea-get.json
+
+            delete_payload=$(jq -n '{
+              command:"reservation-del",
+              service:["dhcp4"],
+              arguments:{
+                "subnet-id":1,
+                "identifier-type":"hw-address",
+                identifier:"02:00:00:00:00:10"
+              }
+            }')
+            curl -fsS -H 'Content-Type: application/json' \
+              -d "$delete_payload" \
+              http://127.0.0.1:18000/ >/tmp/kea-delete.json
+            jq -e '.[0].result == 0' /tmp/kea-delete.json
