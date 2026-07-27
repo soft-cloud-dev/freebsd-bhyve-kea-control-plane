@@ -84,7 +84,7 @@ chmod 0600 "${ADMIN_HOME}/.ssh/authorized_keys"
 echo "[*] Hardening OpenSSH"
 install -d -m 0755 /etc/ssh/sshd_config.d
 cat > "${SSH_INCLUDE}" <<EOF
-PermitRootLogin no
+PermitRootLogin yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PubkeyAuthentication yes
