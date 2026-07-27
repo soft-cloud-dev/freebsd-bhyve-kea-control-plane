@@ -40,5 +40,6 @@ sysrc postgres_exporter_enable=YES >/dev/null
 sysrc postgres_exporter_listen_address="127.0.0.1:9187" >/dev/null
 sysrc grafana_enable=YES >/dev/null
 sysrc grafana_config="/usr/local/etc/grafana/grafana.ini" >/dev/null
+sysrc grafana_homepath="/usr/local/share/grafana" >/dev/null
 
 echo "Dependencies installed. Kea DHCP4 exposes its management API on 127.0.0.1:8000."
