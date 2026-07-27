@@ -41,8 +41,11 @@ if command -v jq >/dev/null 2>&1; then
     trap - EXIT HUP INT TERM
 fi
 
-if command -v kea-dhcp4 >/dev/null 2>&1; then
+if command -v kea-dhcp4 >/dev/null 2>&1 && \
+    [ -r "$KEA_API_USER_FILE" ] && [ -r "$KEA_API_PASSWORD_FILE" ]; then
     kea-dhcp4 -t "$DHCP4_CONF"
+elif command -v kea-dhcp4 >/dev/null 2>&1; then
+    echo "SKIP: Kea API credential files are not readable by the current user" >&2
 elif command -v container >/dev/null 2>&1 && container_is_running kea; then
     container exec kea kea-dhcp4 -t /etc/kea/kea-dhcp4.conf 2>/dev/null || true
 fi
