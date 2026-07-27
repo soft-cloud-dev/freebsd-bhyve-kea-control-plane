@@ -4,11 +4,18 @@ set -eu
 PGDATABASE="${PGDATABASE:-inventory}"
 PGUSER="${PGUSER:-postgres}"
 KEA_CA_URL="${KEA_CA_URL:-http://127.0.0.1:8000/}"
+KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
+KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 
 [ "$#" -eq 1 ] || {
     echo "Usage: $0 <vm_name>" >&2
     exit 64
 }
+
+[ -r "$KEA_API_USER_FILE" ] || { echo "ERROR: missing Kea API user file" >&2; exit 1; }
+[ -r "$KEA_API_PASSWORD_FILE" ] || { echo "ERROR: missing Kea API password file" >&2; exit 1; }
+KEA_API_USER=$(sed -n '1p' "$KEA_API_USER_FILE")
+KEA_API_PASSWORD=$(sed -n '1p' "$KEA_API_PASSWORD_FILE")
 
 VM_NAME=$1
 case "$VM_NAME" in
@@ -37,8 +44,12 @@ EOF
 payload=$(jq -n \
     --arg mac "$MAC_ADDRESS" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
-    '{command:"reservation-del",service:["dhcp4"],arguments:{subnet-id:$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
-response=$(curl -fsS -H 'Content-Type: application/json' -d "$payload" "$KEA_CA_URL")
+    '{command:"reservation-del",arguments:{"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
+response=$(curl -fsS \
+    --user "${KEA_API_USER}:${KEA_API_PASSWORD}" \
+    -H 'Content-Type: application/json' \
+    -d "$payload" \
+    "$KEA_CA_URL")
 result=$(printf '%s' "$response" | jq -er '.[0].result')
 [ "$result" -eq 0 ] || {
     echo "ERROR: Kea rejected reservation removal: $response" >&2
