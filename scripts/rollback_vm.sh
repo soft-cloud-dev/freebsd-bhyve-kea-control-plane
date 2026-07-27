@@ -48,7 +48,7 @@ cfg_response=$(kea_request '{"command":"config-get"}')
 cfg_result=$(printf '%s' "$cfg_response" | jq -er '.[0].result')
 if [ "$cfg_result" -eq 0 ]; then
     new_cfg=$(printf '%s' "$cfg_response" | jq --arg mac "$MAC_ADDRESS" \
-        '.[0].arguments.Dhcp4.subnet4 |= map(.reservations |= (. // []) | map(select(."hw-address" != $mac)))')
+        '.[0].arguments.Dhcp4.subnet4 |= map(.reservations |= ((. // []) | map(select(type == "object" and (."hw-address" // "") != $mac))))')
     set_payload=$(printf '%s' "$new_cfg" | jq '{command:"config-set",arguments:(.[0].arguments | del(.hash))}')
     set_response=$(kea_request "$(printf '%s' "$set_payload")")
     set_result=$(printf '%s' "$set_response" | jq -er '.[0].result')
