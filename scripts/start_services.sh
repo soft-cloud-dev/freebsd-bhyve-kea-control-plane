@@ -13,6 +13,7 @@ PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh "$(dirname "$0")/apply_pf_safely
 if command -v jail >/dev/null 2>&1 && [ -f /etc/jail.conf ]; then
     echo "[*] Starting control plane FreeBSD service jails..."
     for j in postgres kea node_exporter prometheus postgres_exporter grafana; do
+        install -d -m 0755 "/usr/local/jails/$j/dev"
         container_is_running "$j" || jail -c "$j" 2>/dev/null || service jail start "$j" 2>/dev/null || true
     done
 elif command -v container >/dev/null 2>&1; then

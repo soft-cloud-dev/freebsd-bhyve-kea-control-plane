@@ -79,10 +79,15 @@ sysrc pf_enable=YES pflog_enable=YES jail_enable=YES >/dev/null
 
 install -d -m 0755 /usr/local/jails
 
+for j in postgres kea node_exporter prometheus postgres_exporter grafana; do
+    install -d -m 0755 "/usr/local/jails/$j/dev"
+    install -d -m 0755 "/usr/local/jails/$j/etc"
+done
+
 cat > /etc/jail.conf <<EOF
 # Control plane FreeBSD Jails configuration
-exec.start = "/bin/sh /etc/rc";
-exec.stop = "/bin/sh /etc/rc.shutdown";
+exec.start = "/bin/sh -c 'exit 0'";
+exec.stop = "/bin/sh -c 'exit 0'";
 exec.clean;
 mount.devfs;
 host.hostname = "\$name.control-plane.local";
@@ -114,5 +119,6 @@ postgres_exporter {
 EOF
 
 echo "[+] Control plane service configurations updated for FreeBSD Jail / container runtime."
+
 
 

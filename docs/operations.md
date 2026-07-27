@@ -43,6 +43,8 @@ The command removes the Kea reservation first, destroys the guest and its seed I
 
 ```sh
 vm list
+jls
+container list 2>/dev/null || true
 sudo -u postgres psql -d inventory -c 'TABLE vms;'
 sudo -u postgres psql -d inventory -c 'TABLE ipam_leases;'
 pfctl -sr
@@ -50,9 +52,23 @@ pfctl -a 'blacklistd/*' -sr
 sockstat -4 -6 -l
 ```
 
+## Service management
+
+Manage control plane service containers (FreeBSD Jails):
+
+```sh
+# Start all control plane service containers/jails:
+sh scripts/start_services.sh
+
+# Manage individual FreeBSD jails:
+jls
+jexec postgres psql -U postgres -d inventory
+jexec kea kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
+```
+
 ## Failure handling
 
-If provisioning is interrupted after an external side effect, inspect all three state domains:
+If provisioning is interrupted after an external side effect, inspect all state domains:
 
 ```sh
 vm info VM_NAME
@@ -60,6 +76,7 @@ sudo -u postgres psql -d inventory -c "SELECT * FROM vms WHERE name = 'VM_NAME';
 curl -fsS -H 'Content-Type: application/json' \
   -d '{"command":"reservation-get-all","service":["dhcp4"]}' \
   http://127.0.0.1:8000/ | jq .
+jls
 ```
 
 Do not reuse an IP address until both the active inventory row and Kea reservation are resolved.
@@ -68,12 +85,12 @@ Do not reuse an IP address until both the active inventory row and Kea reservati
 
 Back up:
 
-- `/etc/rc.conf`, `/etc/pf.conf`, `/etc/ssh`, and `/etc/blacklistd.conf`
+- `/etc/rc.conf`, `/etc/pf.conf`, `/etc/jail.conf`, `/etc/ssh`, and `/etc/blacklistd.conf`
 - `/usr/local/etc/kea`
 - PostgreSQL inventory using `pg_dump`
 - vm-bhyve templates and guest definitions
 - ZFS snapshots and replication targets
-- SSH host keys and the future SSH CA trust anchor
+- SSH host keys and future SSH CA trust anchors
 
 ## Change control
 
@@ -83,6 +100,4 @@ Before applying changes:
 make lint
 make validate-freebsd
 pfctl -nf /etc/pf.conf
-kea-dhcp4 -t /usr/local/etc/kea/kea-dhcp4.conf
-kea-ctrl-agent -t /usr/local/etc/kea/kea-ctrl-agent.conf
 ```

@@ -18,11 +18,9 @@ OpenSSH denies root login and password-based authentication. Access is limited t
 
 A future `TrustedUserCAKeys` deployment should issue short-lived SSH user certificates through an approved CA workflow rather than copying permanent keys between hosts.
 
-### Network exposure
+### Network exposure & Jail Isolation
 
-PF uses default deny. SSH and observability are management-only. DHCP and DNS are bridge-only. Kea Control Agent and PostgreSQL are intended to remain local to the host.
-
-The example ruleset must be adapted to the actual interface topology. Incorrect interface names can either block management access or expose services unexpectedly.
+PF uses default deny. Control plane services (PostgreSQL, Kea DHCP4, Prometheus, Grafana, Node Exporter, Postgres Exporter) are containerized and isolated inside FreeBSD Jails (`jail.conf`). SSH and Grafana are management-only. DHCP and DNS are bridge-only. Kea Control Agent and PostgreSQL remain loopback-bound within their service jail boundaries.
 
 ### Inventory and IPAM
 
