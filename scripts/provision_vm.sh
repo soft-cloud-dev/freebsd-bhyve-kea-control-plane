@@ -4,6 +4,8 @@ set -eu
 PGDATABASE="${PGDATABASE:-inventory}"
 PGUSER="${PGUSER:-postgres}"
 KEA_CA_URL="${KEA_CA_URL:-http://127.0.0.1:8000/}"
+KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
+KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 VM_OWNER="${VM_OWNER:-admin}"
 CLOUD_INIT_USER="${CLOUD_INIT_USER:-${VM_OWNER}}"
 SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE:-}"
@@ -61,6 +63,15 @@ resolve_vm_root() {
     printf '%s\n' "$mountpoint"
 }
 
+kea_request() {
+    payload=$1
+    curl -fsS \
+        --user "${KEA_API_USER}:${KEA_API_PASSWORD}" \
+        -H 'Content-Type: application/json' \
+        -d "$payload" \
+        "$KEA_CA_URL"
+}
+
 create_seed_iso() {
     seed_source=$1
     seed_output=$2
@@ -97,6 +108,13 @@ for command in vm psql curl jq zfs mktemp; do
     command -v "$command" >/dev/null 2>&1 || die "missing command: $command"
 done
 
+[ -r "$KEA_API_USER_FILE" ] || die "missing Kea API user file: $KEA_API_USER_FILE"
+[ -r "$KEA_API_PASSWORD_FILE" ] || die "missing Kea API password file: $KEA_API_PASSWORD_FILE"
+KEA_API_USER=$(sed -n '1p' "$KEA_API_USER_FILE")
+KEA_API_PASSWORD=$(sed -n '1p' "$KEA_API_PASSWORD_FILE")
+[ -n "$KEA_API_USER" ] || die "Kea API user is empty"
+[ -n "$KEA_API_PASSWORD" ] || die "Kea API password is empty"
+
 SSH_KEY=$(resolve_ssh_key)
 case "$SSH_KEY" in
     "ssh-ed25519 "*|"sk-ssh-ed25519@openssh.com "*) ;;
@@ -131,8 +149,8 @@ rollback() {
             payload=$(jq -n \
                 --arg mac "$MAC_ADDRESS" \
                 --argjson subnet_id "$KEA_SUBNET_ID" \
-                '{command:"reservation-del",service:["dhcp4"],arguments:{subnet-id:$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
-            curl -fsS -H 'Content-Type: application/json' -d "$payload" "$KEA_CA_URL" >/dev/null 2>&1 || true
+                '{command:"reservation-del",arguments:{"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
+            kea_request "$payload" >/dev/null 2>&1 || true
         fi
 
         if [ "$inserted_vm" -eq 1 ]; then
@@ -246,8 +264,8 @@ payload=$(jq -n \
     --arg ip "$IP_ADDRESS" \
     --arg hostname "$VM_NAME" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
-    '{command:"reservation-add",service:["dhcp4"],arguments:{reservation:{"subnet-id":$subnet_id,"hw-address":$mac,"ip-address":$ip,"hostname":$hostname}}}')
-response=$(curl -fsS -H 'Content-Type: application/json' -d "$payload" "$KEA_CA_URL")
+    '{command:"reservation-add",arguments:{reservation:{"subnet-id":$subnet_id,"hw-address":$mac,"ip-address":$ip,"hostname":$hostname}}}')
+response=$(kea_request "$payload")
 result=$(printf '%s' "$response" | jq -er '.[0].result')
 [ "$result" -eq 0 ] || die "Kea rejected reservation: $response"
 kea_reserved=1
