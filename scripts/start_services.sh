@@ -50,7 +50,10 @@ elif ! command -v container >/dev/null 2>&1 || command -v jail >/dev/null 2>&1; 
     elif [ -x /usr/local/etc/rc.d/grafana-loki ]; then
         loki_service="grafana-loki"
     fi
-    [ -z "$loki_service" ] || service "$loki_service" restart 2>/dev/null || service "$loki_service" start 2>/dev/null || true
+    [ -n "$loki_service" ] || die "Loki rc.d service is missing; install the grafana-loki package"
+    service "$loki_service" restart 2>/dev/null || \
+        service "$loki_service" start || \
+        die "failed to start the ${loki_service} service; check /var/log/loki/loki.log"
 
     promtail_service=""
     if [ -x /usr/local/etc/rc.d/promtail ]; then
@@ -60,11 +63,27 @@ elif ! command -v container >/dev/null 2>&1 || command -v jail >/dev/null 2>&1; 
     elif [ -x /usr/local/etc/rc.d/grafana-promtail ]; then
         promtail_service="grafana-promtail"
     fi
-    [ -z "$promtail_service" ] || service "$promtail_service" restart 2>/dev/null || service "$promtail_service" start 2>/dev/null || true
+    [ -n "$promtail_service" ] || die "Promtail rc.d service is missing; install the grafana-loki package"
+    service "$promtail_service" restart 2>/dev/null || \
+        service "$promtail_service" start || \
+        die "failed to start the ${promtail_service} service; check /var/log/promtail/promtail.log"
 fi
 
 user=$(sed -n '1p' "${KEA_API_USER_FILE}")
 password=$(sed -n '1p' "${KEA_API_PASSWORD_FILE}")
+
+i=0
+until curl -fsS http://127.0.0.1:3100/ready >/dev/null 2>&1; do
+    i=$((i+1))
+    [ "$i" -lt 15 ] || {
+        if [ -r /var/log/loki/loki.log ]; then
+            echo "Last 20 lines from /var/log/loki/loki.log:" >&2
+            tail -n 20 /var/log/loki/loki.log >&2
+        fi
+        die "Loki did not become ready on 127.0.0.1:3100 within 15 seconds"
+    }
+    sleep 1
+done
 
 i=0
 until curl -fsS --user "${user}:${password}" -H 'Content-Type: application/json' -d '{"command":"status-get"}' http://127.0.0.1:8000/ >/dev/null 2>&1; do
@@ -90,4 +109,3 @@ if [ -x /usr/local/etc/rc.d/grafana ] || (command -v container >/dev/null 2>&1 &
 fi
 
 echo "[+] Service startup sequence completed."
-

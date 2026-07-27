@@ -62,12 +62,12 @@ if [ -f config/promtail.yml ]; then
     install -m 0644 config/promtail.yml /usr/local/etc/promtail.yml
 fi
 
-install -d -m 0755 /var/db/loki /var/log/loki /var/db/promtail
+install -d -m 0755 /var/db/loki /var/log/loki /var/db/promtail /var/log/promtail
 if id loki >/dev/null 2>&1; then
     chown -R loki:loki /var/db/loki /var/log/loki
 fi
 if id promtail >/dev/null 2>&1; then
-    chown -R promtail:promtail /var/db/promtail
+    chown -R promtail:promtail /var/db/promtail /var/log/promtail
 fi
 
 install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources \
@@ -107,18 +107,18 @@ fi
 [ ! -x /usr/local/etc/rc.d/prometheus ] || sysrc prometheus_enable=YES >/dev/null
 [ ! -x /usr/local/etc/rc.d/grafana ] || sysrc grafana_enable=YES >/dev/null
 if [ -x /usr/local/etc/rc.d/loki ]; then
-    sysrc loki_enable=YES >/dev/null
+    sysrc loki_enable=YES loki_config=/usr/local/etc/loki.yml >/dev/null
 elif [ -x /usr/local/etc/rc.d/grafana_loki ]; then
-    sysrc grafana_loki_enable=YES >/dev/null
+    sysrc grafana_loki_enable=YES grafana_loki_config=/usr/local/etc/loki.yml >/dev/null
 elif [ -x /usr/local/etc/rc.d/grafana-loki ]; then
-    sysrc grafana_loki_enable=YES >/dev/null
+    sysrc grafana_loki_enable=YES grafana_loki_config=/usr/local/etc/loki.yml >/dev/null
 fi
 if [ -x /usr/local/etc/rc.d/promtail ]; then
-    sysrc promtail_enable=YES >/dev/null
+    sysrc promtail_enable=YES promtail_config=/usr/local/etc/promtail.yml >/dev/null
 elif [ -x /usr/local/etc/rc.d/grafana_promtail ]; then
-    sysrc grafana_promtail_enable=YES >/dev/null
+    sysrc grafana_promtail_enable=YES grafana_promtail_config=/usr/local/etc/promtail.yml >/dev/null
 elif [ -x /usr/local/etc/rc.d/grafana-promtail ]; then
-    sysrc grafana_promtail_enable=YES >/dev/null
+    sysrc grafana_promtail_enable=YES grafana_promtail_config=/usr/local/etc/promtail.yml >/dev/null
 fi
 if [ -n "${POSTGRES_EXPORTER_DSN}" ] && [ -x /usr/local/etc/rc.d/postgres_exporter ]; then
     sysrc postgres_exporter_enable=YES >/dev/null
@@ -174,6 +174,5 @@ promtail {
 EOF
 
 echo "[+] Control plane service configurations updated for FreeBSD Jail / container runtime."
-
 
 

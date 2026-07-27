@@ -11,6 +11,9 @@ PROMTAIL_CONF="${PROMTAIL_CONF:-${ROOT}/config/promtail.yml}"
 DASHBOARD_PROVIDER="${DASHBOARD_PROVIDER:-${ROOT}/config/grafana/provisioning/dashboards/default.yml}"
 DASHBOARD_DIR="${DASHBOARD_DIR:-${ROOT}/config/grafana/provisioning/dashboards/json}"
 GRAFANA_HEALTH_URL="${GRAFANA_HEALTH_URL:-http://10.0.10.2:3000/api/health}"
+DEPENDENCY_SCRIPT="${DEPENDENCY_SCRIPT:-${ROOT}/scripts/02_install_dependencies.sh}"
+CONFIGURE_SCRIPT="${CONFIGURE_SCRIPT:-${ROOT}/scripts/configure_services.sh}"
+START_SCRIPT="${START_SCRIPT:-${ROOT}/scripts/start_services.sh}"
 
 . "${ROOT}/scripts/lib.sh"
 
@@ -21,7 +24,10 @@ for file in \
     "$LOKI_CONF" \
     "$LOKI_DATASOURCE_CONF" \
     "$PROMTAIL_CONF" \
-    "$DASHBOARD_PROVIDER"
+    "$DASHBOARD_PROVIDER" \
+    "$DEPENDENCY_SCRIPT" \
+    "$CONFIGURE_SCRIPT" \
+    "$START_SCRIPT"
 do
     [ -r "$file" ] || die "missing or unreadable file: $file"
 done
@@ -38,6 +44,14 @@ grep -q 'http_listen_port:[[:space:]]*3100' "$LOKI_CONF" || \
     die "Loki HTTP listen port is not configured to 3100"
 grep -q 'url:[[:space:]]*http://127\.0\.0\.1:3100/loki/api/v1/push' "$PROMTAIL_CONF" || \
     die "Promtail client push URL does not target loopback Loki"
+grep -Eq 'pkg install -y[[:space:]]+grafana-loki' "$DEPENDENCY_SCRIPT" || \
+    die "dependency installer does not install the FreeBSD grafana-loki package"
+grep -Eq 'sysrc loki_enable=YES loki_config=/usr/local/etc/loki\.yml' "$CONFIGURE_SCRIPT" || \
+    die "Loki rc service is not configured to use /usr/local/etc/loki.yml"
+grep -Eq 'sysrc promtail_enable=YES promtail_config=/usr/local/etc/promtail\.yml' "$CONFIGURE_SCRIPT" || \
+    die "Promtail rc service is not configured to use /usr/local/etc/promtail.yml"
+grep -q 'http://127\.0\.0\.1:3100/ready' "$START_SCRIPT" || \
+    die "service startup does not check Loki readiness"
 
 grep -Eq '^[[:space:]]*allow_sign_up[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$GRAFANA_CONF" || \
     die "Grafana user sign-up is not disabled"
