@@ -18,7 +18,7 @@ pkg install -y \
     postgresql16-server \
     prometheus \
     prometheus-postgres-exporter \
-    py311-cloud-init \
+    py312-cloud-init \
     sudo \
     tmux \
     vm-bhyve
