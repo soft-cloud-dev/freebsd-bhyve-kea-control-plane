@@ -26,14 +26,7 @@ EOF
     exit 64
 }
 
-die() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
-
-sql_literal() {
-    printf '%s' "$1" | sed "s/'/''/g"
-}
+. "$(dirname "$0")/lib.sh"
 
 yaml_single_quote() {
     printf '%s' "$1" | sed "s/'/''/g"
@@ -63,14 +56,7 @@ resolve_vm_root() {
     printf '%s\n' "$mountpoint"
 }
 
-kea_request() {
-    payload=$1
-    curl -fsS \
-        --user "${KEA_API_USER}:${KEA_API_PASSWORD}" \
-        -H 'Content-Type: application/json' \
-        -d "$payload" \
-        "$KEA_CA_URL"
-}
+
 
 create_seed_iso() {
     seed_source=$1
@@ -104,9 +90,7 @@ case "$CLOUD_INIT_USER" in
     ''|*[!a-z0-9_-]*|[0-9-]*) die "invalid cloud-init user: $CLOUD_INIT_USER" ;;
 esac
 
-for command in vm psql curl jq zfs mktemp; do
-    command -v "$command" >/dev/null 2>&1 || die "missing command: $command"
-done
+require_commands vm psql curl jq zfs mktemp
 
 [ -r "$KEA_API_USER_FILE" ] || die "missing Kea API user file: $KEA_API_USER_FILE"
 [ -r "$KEA_API_PASSWORD_FILE" ] || die "missing Kea API password file: $KEA_API_PASSWORD_FILE"

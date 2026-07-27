@@ -1,10 +1,8 @@
 #!/bin/sh
 set -eu
 
-[ "$(id -u)" -eq 0 ] || {
-    echo "ERROR: run as root" >&2
-    exit 1
-}
+. "$(dirname "$0")/lib.sh"
+require_root
 
 pkg update -f
 pkg install -y \

@@ -9,10 +9,7 @@ SSH_ADMIN_KEY_FILE="${SSH_ADMIN_KEY_FILE:-}"
 SSH_ADMIN_AUTHORIZED_KEY="${SSH_ADMIN_AUTHORIZED_KEY:-}"
 SSH_INCLUDE="/etc/ssh/sshd_config.d/99-hardening.conf"
 
-die() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
+. "$(dirname "$0")/lib.sh"
 
 resolve_admin_key() {
     if [ -n "${SSH_ADMIN_KEY_FILE}" ]; then
@@ -27,9 +24,8 @@ resolve_admin_key() {
     printf '%s\n' "${SSH_ADMIN_AUTHORIZED_KEY}"
 }
 
-[ "$(id -u)" -eq 0 ] || die "run as root"
-command -v zfs >/dev/null 2>&1 || die "ZFS is required"
-command -v pw >/dev/null 2>&1 || die "pw is required"
+require_root
+require_commands zfs pw
 
 case "${MGMT_USER}" in
     ''|*[!a-z0-9_-]*|[0-9-]*) die "invalid management user: ${MGMT_USER}" ;;

@@ -12,6 +12,8 @@ KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-passw
     exit 64
 }
 
+. "$(dirname "$0")/lib.sh"
+
 [ -r "$KEA_API_USER_FILE" ] || { echo "ERROR: missing Kea API user file" >&2; exit 1; }
 [ -r "$KEA_API_PASSWORD_FILE" ] || { echo "ERROR: missing Kea API password file" >&2; exit 1; }
 KEA_API_USER=$(sed -n '1p' "$KEA_API_USER_FILE")
@@ -45,11 +47,7 @@ payload=$(jq -n \
     --arg mac "$MAC_ADDRESS" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
     '{command:"reservation-del",arguments:{"subnet-id":$subnet_id,"identifier-type":"hw-address","identifier":$mac}}')
-response=$(curl -fsS \
-    --user "${KEA_API_USER}:${KEA_API_PASSWORD}" \
-    -H 'Content-Type: application/json' \
-    -d "$payload" \
-    "$KEA_CA_URL")
+response=$(kea_request "$payload")
 result=$(printf '%s' "$response" | jq -er '.[0].result')
 [ "$result" -eq 0 ] || {
     echo "ERROR: Kea rejected reservation removal: $response" >&2

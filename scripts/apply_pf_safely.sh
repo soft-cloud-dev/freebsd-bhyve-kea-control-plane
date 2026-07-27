@@ -12,10 +12,8 @@ PF_WAS_ENABLED_FILE="${PF_STATE_DIR}/was-enabled"
 PF_ROLLBACK_LOG="${PF_ROLLBACK_LOG:-/var/log/control-plane-pf-rollback.log}"
 PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT:-120}"
 
-die() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
+. "$(dirname "$0")/lib.sh"
+
 
 pf_is_enabled() {
     pfctl -s info 2>/dev/null | grep -q '^Status: Enabled'
@@ -51,9 +49,8 @@ restore_previous_state() {
 
 case "${MODE}" in
     apply)
-        [ "$(id -u)" -eq 0 ] || die "run as root"
-        command -v pfctl >/dev/null 2>&1 || die "pfctl is required"
-        command -v nohup >/dev/null 2>&1 || die "nohup is required"
+        require_root
+        require_commands pfctl nohup
         [ -r "${PF_CONF}" ] || die "PF configuration is not readable: ${PF_CONF}"
         case "${PF_ROLLBACK_TIMEOUT}" in
             ''|*[!0-9]*) die "PF_ROLLBACK_TIMEOUT must be an integer" ;;
@@ -92,7 +89,7 @@ case "${MODE}" in
         ;;
 
     confirm)
-        [ "$(id -u)" -eq 0 ] || die "run as root"
+        require_root
         install -d -m 0755 "${PF_STATE_DIR}"
         : > "${PF_CONFIRM_FILE}"
         stop_worker
@@ -101,7 +98,7 @@ case "${MODE}" in
         ;;
 
     rollback)
-        [ "$(id -u)" -eq 0 ] || die "run as root"
+        require_root
         stop_worker
         restore_previous_state
         rm -f "${PF_CONFIRM_FILE}" "${PF_WAS_ENABLED_FILE}"

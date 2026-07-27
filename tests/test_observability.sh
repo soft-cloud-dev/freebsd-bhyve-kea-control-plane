@@ -9,10 +9,7 @@ DASHBOARD_PROVIDER="${DASHBOARD_PROVIDER:-${ROOT}/config/grafana/provisioning/da
 DASHBOARD_DIR="${DASHBOARD_DIR:-${ROOT}/config/grafana/provisioning/dashboards/json}"
 GRAFANA_HEALTH_URL="${GRAFANA_HEALTH_URL:-http://10.0.10.2:3000/api/health}"
 
-fail() {
-    echo "FAIL: $*" >&2
-    exit 1
-}
+. "${ROOT}/scripts/lib.sh"
 
 for file in \
     "$PROMETHEUS_CONF" \
@@ -20,29 +17,29 @@ for file in \
     "$DATASOURCE_CONF" \
     "$DASHBOARD_PROVIDER"
 do
-    [ -r "$file" ] || fail "missing or unreadable file: $file"
+    [ -r "$file" ] || die "missing or unreadable file: $file"
 done
 
-[ -d "$DASHBOARD_DIR" ] || fail "missing dashboard directory: $DASHBOARD_DIR"
+[ -d "$DASHBOARD_DIR" ] || die "missing dashboard directory: $DASHBOARD_DIR"
 
 grep -q '127\.0\.0\.1:9090' "$PROMETHEUS_CONF" || \
-    fail "Prometheus self target is not loopback-bound"
+    die "Prometheus self target is not loopback-bound"
 grep -q '127\.0\.0\.1:9100' "$PROMETHEUS_CONF" || \
-    fail "node_exporter target is not loopback-bound"
+    die "node_exporter target is not loopback-bound"
 grep -q '127\.0\.0\.1:9187' "$PROMETHEUS_CONF" || \
-    fail "postgres_exporter target is not loopback-bound"
+    die "postgres_exporter target is not loopback-bound"
 
 grep -Eq '^[[:space:]]*allow_sign_up[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$GRAFANA_CONF" || \
-    fail "Grafana user sign-up is not disabled"
+    die "Grafana user sign-up is not disabled"
 grep -A2 '^\[auth\.anonymous\]' "$GRAFANA_CONF" | \
     grep -Eq '^[[:space:]]*enabled[[:space:]]*=[[:space:]]*false[[:space:]]*$' || \
-    fail "Grafana anonymous authentication is not disabled"
+    die "Grafana anonymous authentication is not disabled"
 
 grep -q 'url:[[:space:]]*http://127\.0\.0\.1:9090' "$DATASOURCE_CONF" || \
-    fail "Grafana datasource does not use loopback Prometheus"
+    die "Grafana datasource does not use loopback Prometheus"
 
 grep -q 'path:[[:space:]]*/usr/local/etc/grafana/provisioning/dashboards/json' "$DASHBOARD_PROVIDER" || \
-    fail "Grafana dashboard provider path is incorrect"
+    die "Grafana dashboard provider path is incorrect"
 
 if command -v promtool >/dev/null 2>&1; then
     promtool check config "$PROMETHEUS_CONF"
@@ -56,9 +53,9 @@ if command -v jq >/dev/null 2>&1; then
         [ -e "$dashboard" ] || continue
         found=1
         jq -e '.title and .uid and (.panels | type == "array")' "$dashboard" >/dev/null || \
-            fail "invalid Grafana dashboard: $dashboard"
+            die "invalid Grafana dashboard: $dashboard"
     done
-    [ "$found" -eq 1 ] || fail "no Grafana dashboard JSON files found"
+    [ "$found" -eq 1 ] || die "no Grafana dashboard JSON files found"
 else
     echo "SKIP: jq is not installed; dashboard JSON was not parsed" >&2
 fi
@@ -68,7 +65,7 @@ if command -v service >/dev/null 2>&1 && [ -x /usr/local/etc/rc.d/grafana ]; the
         response=$(fetch -qo- "$GRAFANA_HEALTH_URL" 2>/dev/null || curl -fsS "$GRAFANA_HEALTH_URL" 2>/dev/null || true)
         if [ -n "$response" ]; then
             printf '%s' "$response" | jq -e '.database == "ok"' >/dev/null || \
-                fail "Grafana database health is not ok"
+                die "Grafana database health is not ok"
         fi
     fi
 fi

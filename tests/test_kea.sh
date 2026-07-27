@@ -7,6 +7,8 @@ KEA_API_URL="${KEA_API_URL:-http://127.0.0.1:8000/}"
 KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 
+. "${ROOT}/scripts/lib.sh"
+
 if ! command -v kea-dhcp4 >/dev/null 2>&1; then
     echo "SKIP: kea-dhcp4 is not installed" >&2
     exit 0
@@ -18,14 +20,8 @@ grep -q '"socket-address"[[:space:]]*:[[:space:]]*"127.0.0.1"' "$DHCP4_CONF"
 grep -q '"socket-port"[[:space:]]*:[[:space:]]*8000' "$DHCP4_CONF"
 
 if sockstat -4 -l 2>/dev/null | awk '$6 == "127.0.0.1:8000" { found=1 } END { exit !found }'; then
-    [ -s "$KEA_API_USER_FILE" ] || {
-        echo "ERROR: missing Kea API user file: $KEA_API_USER_FILE" >&2
-        exit 1
-    }
-    [ -s "$KEA_API_PASSWORD_FILE" ] || {
-        echo "ERROR: missing Kea API password file: $KEA_API_PASSWORD_FILE" >&2
-        exit 1
-    }
+    [ -s "$KEA_API_USER_FILE" ] || die "missing Kea API user file: $KEA_API_USER_FILE"
+    [ -s "$KEA_API_PASSWORD_FILE" ] || die "missing Kea API password file: $KEA_API_PASSWORD_FILE"
 
     user=$(sed -n '1p' "$KEA_API_USER_FILE")
     password=$(sed -n '1p' "$KEA_API_PASSWORD_FILE")

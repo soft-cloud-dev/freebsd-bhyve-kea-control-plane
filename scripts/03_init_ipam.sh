@@ -20,16 +20,11 @@ case "$KEA_SUBNET_ID" in
     ''|*[!0-9]*) echo "ERROR: invalid KEA_SUBNET_ID" >&2; exit 1 ;;
 esac
 
-for command in psql; do
-    command -v "$command" >/dev/null 2>&1 || {
-        echo "ERROR: missing command: $command" >&2
-        exit 1
-    }
-done
+. "$(dirname "$0")/lib.sh"
+require_commands psql
 
-sql_literal() {
-    printf '%s' "$1" | sed "s/'/''/g"
-}
+
+
 
 pool=$(sql_literal "$IPAM_POOL")
 subnet=$(sql_literal "$IPAM_SUBNET")
