@@ -64,7 +64,9 @@ if id grafana >/dev/null 2>&1; then
     chown -R grafana:grafana /var/db/grafana /var/log/grafana /usr/local/etc/grafana
 fi
 
-sed "s|^http_addr[[:space:]]*=.*|http_addr = ${MGMT_ADDR}|" config/grafana.ini > "$grafana_tmp"
+sed -e "s|^http_addr[[:space:]]*=.*|http_addr = ${MGMT_ADDR}|" \
+    -e "s|^domain[[:space:]]*=.*|domain = ${MGMT_ADDR}|" \
+    -e "s|^root_url[[:space:]]*=.*|root_url = %(protocol)s://%(http_addr)s:%(http_port)s/|" config/grafana.ini > "$grafana_tmp"
 install -m 0644 "$grafana_tmp" /usr/local/etc/grafana.ini
 install -m 0644 "$grafana_tmp" /usr/local/etc/grafana/grafana.ini
 
