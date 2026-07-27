@@ -135,7 +135,8 @@ rollback() {
             if [ -n "$cfg" ]; then
                 new_cfg=$(printf '%s' "$cfg" | jq --arg mac "$MAC_ADDRESS" \
                     '.[0].arguments.Dhcp4.subnet4 |= map(.reservations |= map(select(."hw-address" != $mac)))')
-                kea_request "{\"command\":\"config-set\",\"arguments\":$(printf '%s' "$new_cfg" | jq '.[0].arguments')}" >/dev/null 2>&1 || true
+                set_payload=$(printf '%s' "$new_cfg" | jq '{command:"config-set",arguments:(.[0].arguments | del(.hash))}')
+                kea_request "$(printf '%s' "$set_payload")" >/dev/null 2>&1 || true
                 kea_request '{"command":"config-write"}' >/dev/null 2>&1 || true
             fi
         fi
@@ -262,8 +263,8 @@ new_cfg=$(printf '%s' "$cfg_response" | jq \
         else . end
     )')
 
-set_payload=$(printf '%s' "$new_cfg" | jq '{command:"config-set",arguments:.[0].arguments}')
-set_response=$(kea_request "$(printf '%s' "$set_payload")") 
+set_payload=$(printf '%s' "$new_cfg" | jq '{command:"config-set",arguments:(.[0].arguments | del(.hash))}')
+set_response=$(kea_request "$(printf '%s' "$set_payload")")
 set_result=$(printf '%s' "$set_response" | jq -er '.[0].result')
 [ "$set_result" -eq 0 ] || die "Kea config-set failed: $set_response"
 
