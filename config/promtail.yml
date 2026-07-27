@@ -1,0 +1,46 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/db/promtail/positions.yaml
+
+clients:
+  - url: http://127.0.0.1:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslogs
+          host: freebsd-control-plane
+          __path__: /var/log/messages
+
+  - job_name: varlogs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          host: freebsd-control-plane
+          __path__: /var/log/*.log
+
+  - job_name: kea
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: kea
+          host: freebsd-control-plane
+          __path__: /var/log/kea*.log
+
+  - job_name: grafana
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: grafana
+          host: freebsd-control-plane
+          __path__: /var/log/grafana/*.log

@@ -58,9 +58,16 @@ if [ -f config/loki.yml ]; then
     install -m 0644 config/loki.yml /usr/local/etc/loki.yml
 fi
 
-install -d -m 0755 /var/db/loki /var/log/loki
+if [ -f config/promtail.yml ]; then
+    install -m 0644 config/promtail.yml /usr/local/etc/promtail.yml
+fi
+
+install -d -m 0755 /var/db/loki /var/log/loki /var/db/promtail
 if id loki >/dev/null 2>&1; then
     chown -R loki:loki /var/db/loki /var/log/loki
+fi
+if id promtail >/dev/null 2>&1; then
+    chown -R promtail:promtail /var/db/promtail
 fi
 
 install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources \
@@ -100,13 +107,14 @@ fi
 [ ! -x /usr/local/etc/rc.d/prometheus ] || sysrc prometheus_enable=YES >/dev/null
 [ ! -x /usr/local/etc/rc.d/grafana ] || sysrc grafana_enable=YES >/dev/null
 [ ! -x /usr/local/etc/rc.d/loki ] || sysrc loki_enable=YES >/dev/null
+[ ! -x /usr/local/etc/rc.d/promtail ] || sysrc promtail_enable=YES >/dev/null
 if [ -n "${POSTGRES_EXPORTER_DSN}" ] && [ -x /usr/local/etc/rc.d/postgres_exporter ]; then
     sysrc postgres_exporter_enable=YES >/dev/null
 fi
 
 install -d -m 0755 /usr/local/jails
 
-for j in postgres kea node_exporter prometheus postgres_exporter grafana loki; do
+for j in postgres kea node_exporter prometheus postgres_exporter grafana loki promtail; do
     install -d -m 0755 "/usr/local/jails/$j/dev"
     install -d -m 0755 "/usr/local/jails/$j/etc"
 done
@@ -145,6 +153,10 @@ postgres_exporter {
 }
 
 loki {
+    ip4.addr = 127.0.0.1;
+}
+
+promtail {
     ip4.addr = 127.0.0.1;
 }
 EOF

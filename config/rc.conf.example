@@ -30,6 +30,9 @@ grafana_config="/usr/local/etc/grafana/grafana.ini"
 loki_enable="YES"
 loki_config="/usr/local/etc/loki.yml"
 
+promtail_enable="YES"
+promtail_config="/usr/local/etc/promtail.yml"
+
 # Example physical and bridge configuration; replace interface names and addresses.
 cloned_interfaces="bridge0 vlan10"
 ifconfig_vlan10="inet 10.0.10.2/24 vlan 10 vlandev igb0"

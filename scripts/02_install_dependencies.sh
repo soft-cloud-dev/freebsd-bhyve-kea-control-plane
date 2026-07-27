@@ -20,6 +20,7 @@ pkg install -y \
     postgresql16-client \
     postgresql16-server \
     prometheus \
+    promtail \
     py312-cloud-init \
     sudo \
     tmux \

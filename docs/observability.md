@@ -7,16 +7,17 @@ node_exporter 127.0.0.1:9100 ----+
 postgres_exporter 127.0.0.1:9187 +--> Prometheus 127.0.0.1:9090 --+
 Prometheus self-metrics ----------+                              |
                                                                  v
-Loki 127.0.0.1:3100 ------------------------------------> Grafana 10.0.10.2:3000
+Promtail 127.0.0.1:9080 (/var/log/*) --> Loki 127.0.0.1:3100 -> Grafana 10.0.10.2:3000
 ```
 
-Prometheus, Loki, and both exporters bind to loopback. Grafana is the only component exposed on the management VLAN. PF permits TCP/3000 only from `mgmt_net`.
+Prometheus, Loki, Promtail, and both exporters bind to loopback. Grafana is the only component exposed on the management VLAN. PF permits TCP/3000 only from `mgmt_net`.
 
 ## Install configuration
 
 ```sh
 install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml
 install -m 0644 config/loki.yml /usr/local/etc/loki.yml
+install -m 0644 config/promtail.yml /usr/local/etc/promtail.yml
 install -m 0644 config/grafana.ini /usr/local/etc/grafana/grafana.ini
 install -d -m 0755 /usr/local/etc/grafana/provisioning/datasources
 install -d -m 0755 /usr/local/etc/grafana/provisioning/dashboards/json
@@ -75,12 +76,14 @@ Expected bindings:
 
 ## Initial dashboards
 
-Grafana provisions Prometheus as its default datasource. Import or provision dashboards only after reviewing their queries and variable definitions. Do not automatically download unsigned dashboard JSON during host installation.
+Grafana provisions Prometheus as its default metrics datasource and Loki as its log datasource. The control plane provides pre-provisioned JSON dashboards:
 
-Useful initial signals:
+1. **FreeBSD Control Plane Overview** (`control-plane-overview.json`):
+   - Host load, CPU, memory, filesystem capacity, and extended network signals (throughput RX/TX, packet rates, errors & drops);
+   - PostgreSQL availability, connections, transaction rate, locks, and database size;
+   - Prometheus target health and scrape duration.
 
-- host load, CPU, memory, filesystem capacity, and extended network signals (throughput RX/TX, packet rates, errors & drops);
-- PostgreSQL availability, connections, transaction rate, locks, and database size;
-- Prometheus target health and scrape duration;
-- ZFS capacity through node-exporter-supported collectors or a reviewed textfile collector;
-- vm-bhyve guest state through a future textfile collector generated from `vm list`.
+2. **Control Plane Logs** (`control-plane-logs.json`):
+   - Aggregated log volume and log entry rates over time;
+   - Error and warning event rates;
+   - Full-text search log stream viewer with interactive filtering.
