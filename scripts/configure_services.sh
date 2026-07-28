@@ -70,6 +70,10 @@ if [ "$STORK_ENABLE" = yes ]; then
         pw useradd stork-agent -g stork-agent -d /var/lib/stork-agent \
             -s /usr/sbin/nologin -c "ISC Stork agent"
 
+    pw groupshow stork >/dev/null 2>&1 || pw groupadd stork
+    pw groupmod stork -m stork-server
+    pw groupmod stork -m stork-agent
+
     pw groupshow kea-control >/dev/null 2>&1 || pw groupadd kea-control
     pw groupmod kea-control -m stork-agent
     if id kea >/dev/null 2>&1; then
@@ -108,8 +112,11 @@ fi
 
 if [ "$STORK_ENABLE" = yes ]; then
     install -d -m 0750 /usr/local/etc/stork
+    chown root:stork /usr/local/etc/stork
     stork_password_dir=$(dirname "$STORK_DB_PASSWORD_FILE")
-    install -d -m 0750 "$stork_password_dir"
+    if [ "$stork_password_dir" != /usr/local/etc/stork ]; then
+        [ -d "$stork_password_dir" ] || install -d -m 0750 "$stork_password_dir"
+    fi
     if [ ! -s "$STORK_DB_PASSWORD_FILE" ]; then
         umask 077
         openssl rand -hex 32 > "$STORK_DB_PASSWORD_FILE"

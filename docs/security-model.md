@@ -39,7 +39,7 @@ JSON payloads are generated with `jq`, and the provisioner checks Kea result cod
 
 ### Stork
 
-The UI is restricted to the management network by its bind address and PF. The generated database password is stored in a root-owned, group-readable file for the `stork-server` service. Change the initial `admin` password at first login. Production deployments should enable TLS directly or use an authenticated TLS reverse proxy; the repository’s initial HTTP setup is suitable only for a trusted management segment.
+The UI is restricted to the management network by its bind address and PF. Both service users share traversal-only access to `/usr/local/etc/stork`; the environment files remain group-readable only by their respective service accounts. The generated database password is readable only by the `stork-server` service group. Change the initial `admin` password at first login. Production deployments should enable TLS directly or use an authenticated TLS reverse proxy; the repository’s initial HTTP setup is suitable only for a trusted management segment.
 
 ### Provisioning
 

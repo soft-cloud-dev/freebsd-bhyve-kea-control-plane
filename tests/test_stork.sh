@@ -68,6 +68,12 @@ if grep -Eq -- '-c ".*PASSWORD' "$INIT_SCRIPT"; then
 fi
 grep -q 'chmod 0640.*KEA_API_USER_FILE.*KEA_API_PASSWORD_FILE' "$CONFIGURE_SCRIPT" || \
     die "Kea API credentials are not made readable to the Stork agent group"
+grep -q 'pw groupmod stork -m stork-server' "$CONFIGURE_SCRIPT" || \
+    die "Stork server cannot traverse the shared configuration directory"
+grep -q 'pw groupmod stork -m stork-agent' "$CONFIGURE_SCRIPT" || \
+    die "Stork agent cannot traverse the shared configuration directory"
+grep -q 'chown root:stork /usr/local/etc/stork' "$CONFIGURE_SCRIPT" || \
+    die "Stork configuration directory does not use the shared service group"
 grep -q 'http://${MGMT_ADDR}:8080/' "$START_SCRIPT" || \
     die "Stork UI readiness is not checked"
 
