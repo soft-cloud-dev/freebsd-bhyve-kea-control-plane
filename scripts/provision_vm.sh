@@ -148,6 +148,7 @@ IP_ADDRESS=""
 POOL_ID=""
 KEA_SUBNET_ID=""
 VLAN=""
+VM_UUID=""
 
 rollback() {
     status=$?
@@ -176,14 +177,13 @@ rollback() {
         fi
 
         if [ "$inserted_vm" -eq 1 ]; then
-            escaped_name=$(sql_literal "$VM_NAME")
             psql -X -v ON_ERROR_STOP=1 -qAt <<SQL >/dev/null 2>&1 || true
 BEGIN;
 UPDATE ipam_leases
    SET released_at = CURRENT_TIMESTAMP
  WHERE pool_id = ${POOL_ID}
    AND ip_address = '${IP_ADDRESS}'::inet;
-DELETE FROM vms WHERE name = '${escaped_name}';
+DELETE FROM vms WHERE uuid = '${VM_UUID}'::uuid;
 COMMIT;
 SQL
         fi
@@ -265,18 +265,19 @@ WITH allocation AS (
         '${MAC_ADDRESS}'::macaddr, allocation.ip_address,
         allocation.pool_id, allocation.vlan, '${escaped_template}', 'provisioning'
     FROM allocation
-    RETURNING ip_address, pool_id, vlan
+    RETURNING uuid, ip_address, pool_id, vlan
 )
-SELECT inserted.ip_address, inserted.pool_id, inserted.vlan, pools.kea_subnet_id
+SELECT inserted.uuid, inserted.ip_address, inserted.pool_id, inserted.vlan, pools.kea_subnet_id
   FROM inserted
   JOIN ipam_pools pools ON pools.id = inserted.pool_id;
 COMMIT;
 SQL
 )
 
-IFS='|' read -r IP_ADDRESS POOL_ID VLAN KEA_SUBNET_ID <<EOF
+IFS='|' read -r VM_UUID IP_ADDRESS POOL_ID VLAN KEA_SUBNET_ID <<EOF
 $DB_RESULT
 EOF
+[ -n "$VM_UUID" ] || die "database did not return a VM UUID"
 [ -n "$IP_ADDRESS" ] || die "database did not return an IP address"
 inserted_vm=1
 
@@ -306,11 +307,15 @@ echo "[6/7] Starting VM"
 vm start "$VM_NAME"
 
 echo "[7/7] Marking VM running"
-psql -X -v ON_ERROR_STOP=1 -qAt <<SQL >/dev/null
+FINALIZED_VM=$(psql -X -v ON_ERROR_STOP=1 -qAt <<SQL
 UPDATE vms
    SET status = 'running', last_error = NULL
- WHERE name = '${escaped_name}';
+ WHERE uuid = '${VM_UUID}'::uuid
+   AND status = 'provisioning'
+RETURNING uuid;
 SQL
+)
+[ "$FINALIZED_VM" = "$VM_UUID" ] || die "new inventory row ${VM_UUID} was not in provisioning state"
 
 trap - EXIT INT TERM HUP
 echo "[+] ${VM_NAME} is running at ${IP_ADDRESS} on VLAN ${VLAN}"

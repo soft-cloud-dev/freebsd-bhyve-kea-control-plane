@@ -31,6 +31,8 @@ An existing active name is never replaced automatically. Inspect it and, when re
 `scripts/rollback_vm.sh` before retrying provisioning. Rollback also completes when the Kea reservation
 or vm-bhyve guest is already absent, which permits cleanup of a stale inventory row. The provisioner
 reports stale inventory explicitly when PostgreSQL has an active row but vm-bhyve has no matching guest.
+Finalization and compensating cleanup use the UUID of the newly inserted inventory row so archived rows
+that previously used the same VM name remain archived and are never modified by a new provisioning run.
 
 The guest image must include cloud-init with the NoCloud datasource enabled. The selected vm-bhyve template must attach `seed.iso` as a CD-ROM.
 

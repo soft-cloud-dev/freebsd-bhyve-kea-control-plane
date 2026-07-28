@@ -49,6 +49,16 @@ grep -Eq 'delete_result.*-eq 3' "$ROLLBACK_SCRIPT" || \
     die "VM rollback does not tolerate an already-absent Kea reservation"
 grep -Eq 'if vm info "\$VM_NAME"' "$ROLLBACK_SCRIPT" || \
     die "VM rollback does not tolerate an already-absent vm-bhyve guest"
+grep -Eq 'RETURNING uuid, ip_address, pool_id, vlan' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not retain the inserted inventory UUID"
+grep -Eq "DELETE FROM vms WHERE uuid = .*VM_UUID.*::uuid" "$PROVISION_SCRIPT" || \
+    die "VM provisioning compensation is not scoped to the inserted inventory UUID"
+grep -Eq "WHERE uuid = .*VM_UUID.*::uuid" "$PROVISION_SCRIPT" || \
+    die "VM finalization is not scoped to the inserted inventory UUID"
+grep -Eq "AND status = 'provisioning'" "$PROVISION_SCRIPT" || \
+    die "VM finalization does not require provisioning state"
+grep -Eq "WHERE uuid = .*VM_UUID.*::uuid" "$ROLLBACK_SCRIPT" || \
+    die "VM rollback is not scoped to the active inventory UUID"
 
 preflight_dir=$(mktemp -d)
 trap 'rm -rf "$preflight_dir"' EXIT HUP INT TERM

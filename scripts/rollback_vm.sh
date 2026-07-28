@@ -27,7 +27,7 @@ esac
 
 sql_name=$(printf "%s" "$VM_NAME" | sed "s/'/''/g")
 row=$(psql -X -v ON_ERROR_STOP=1 -qAt -F '|' <<SQL
-SELECT v.mac_address, v.ip_address, v.pool_id, p.kea_subnet_id
+SELECT v.uuid, v.mac_address, v.ip_address, v.pool_id, p.kea_subnet_id
   FROM vms v
   JOIN ipam_pools p ON p.id = v.pool_id
  WHERE v.name = '${sql_name}'
@@ -40,7 +40,7 @@ SQL
     exit 1
 }
 
-IFS='|' read -r MAC_ADDRESS IP_ADDRESS POOL_ID KEA_SUBNET_ID <<EOF
+IFS='|' read -r VM_UUID MAC_ADDRESS IP_ADDRESS POOL_ID KEA_SUBNET_ID <<EOF
 $row
 EOF
 
@@ -75,7 +75,7 @@ psql -X -v ON_ERROR_STOP=1 -qAt <<SQL >/dev/null
 BEGIN;
 UPDATE vms
    SET status = 'archived'
- WHERE name = '${sql_name}';
+ WHERE uuid = '${VM_UUID}'::uuid;
 UPDATE ipam_leases
    SET released_at = CURRENT_TIMESTAMP
  WHERE pool_id = ${POOL_ID}
