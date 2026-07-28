@@ -39,16 +39,18 @@ STORK_ENABLE ?= yes
 STORK_VERSION ?= 2.5.0
 STORK_GIT_COMMIT ?= 43f1450d1260ce58c2c6c973b72199b6c6592513
 STORK_SOURCE_DIR ?=
+STORK_AGENT_PACKAGES_ENABLE ?= yes
+STORK_AGENT_PACKAGE_ARCH ?=
 STORK_DB_NAME ?= stork
 STORK_DB_USER ?= stork-server
 STORK_DB_PASSWORD_FILE ?= /usr/local/etc/stork/database-password
 STORK_READY_TIMEOUT ?= 60
 
-SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/lib.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
+SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
 TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh
 
 .NOTPARALLEL:
-.PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies configure-host configure-services init-postgresql init-kea-host-db init-stork init-ipam init-vm start-services validate-freebsd
+.PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies install-stork-agent-packages configure-host configure-services init-postgresql init-kea-host-db init-stork init-ipam init-vm start-services validate-freebsd
 
 all help:
 	@echo "FreeBSD bhyve + Kea Control Plane"
@@ -87,7 +89,10 @@ install: check-root check-platform check-trust syntax install-dependencies confi
 	@echo "[+] SSH login: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
 
 install-dependencies:
-	@STORK_ENABLE="${STORK_ENABLE}" STORK_VERSION="${STORK_VERSION}" STORK_GIT_COMMIT="${STORK_GIT_COMMIT}" STORK_SOURCE_DIR="${STORK_SOURCE_DIR}" KEA_PORTS_DIR="${KEA_PORTS_DIR}" KEA_PORTS_FALLBACK_DIR="${KEA_PORTS_FALLBACK_DIR}" sh scripts/02_install_dependencies.sh
+	@STORK_ENABLE="${STORK_ENABLE}" STORK_VERSION="${STORK_VERSION}" STORK_GIT_COMMIT="${STORK_GIT_COMMIT}" STORK_SOURCE_DIR="${STORK_SOURCE_DIR}" STORK_AGENT_PACKAGES_ENABLE="${STORK_AGENT_PACKAGES_ENABLE}" STORK_AGENT_PACKAGE_ARCH="${STORK_AGENT_PACKAGE_ARCH}" KEA_PORTS_DIR="${KEA_PORTS_DIR}" KEA_PORTS_FALLBACK_DIR="${KEA_PORTS_FALLBACK_DIR}" sh scripts/02_install_dependencies.sh
+
+install-stork-agent-packages:
+	@STORK_VERSION="${STORK_VERSION}" STORK_AGENT_PACKAGES_ENABLE="${STORK_AGENT_PACKAGES_ENABLE}" STORK_AGENT_PACKAGE_ARCH="${STORK_AGENT_PACKAGE_ARCH}" sh scripts/install_stork_agent_packages.sh
 
 configure-host:
 	@EXT_IF="${EXT_IF}" MGMT_IF="${MGMT_IF}" LAN_IF="${LAN_IF}" MGMT_ADDR="${MGMT_ADDR}" VM_DATASET="${VM_DATASET}" MGMT_GROUP="${MGMT_GROUP}" MGMT_USER="${MGMT_USER}" SSH_ADMIN_KEY_FILE="${SSH_ADMIN_KEY_FILE}" SSH_ADMIN_AUTHORIZED_KEY="${SSH_ADMIN_AUTHORIZED_KEY}" sh scripts/01_host_setup.sh

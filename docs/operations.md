@@ -71,7 +71,7 @@ service stork_agent status
 service unbound status
 ```
 
-The native FreeBSD agent is installed and registered directly; `/stork-install-agent.sh` is only for distributing `.deb`, `.rpm`, or `.apk` packages to remote Linux machines.
+The native FreeBSD agent is installed and registered directly; `/stork-install-agent.sh` distributes the pinned `.deb`, `.rpm`, or `.apk` package to remote Linux machines. Repair the served package set with `make install-stork-agent-packages STORK_AGENT_PACKAGE_ARCH=amd64` (or `arm64`).
 
 The Stork dashboard is at `http://MGMT_ADDR:8080`. Its database and the Kea hosts database are separate from `inventory`. Back them up with:
 

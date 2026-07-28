@@ -10,6 +10,7 @@ AGENT_TEMPLATE="${ROOT}/config/stork/agent.env.in"
 SERVER_RC="${ROOT}/config/rc.d/stork_server"
 AGENT_RC="${ROOT}/config/rc.d/stork_agent"
 INSTALL_SCRIPT="${ROOT}/scripts/install_stork.sh"
+INSTALL_PACKAGES_SCRIPT="${ROOT}/scripts/install_stork_agent_packages.sh"
 INIT_SCRIPT="${ROOT}/scripts/init_stork.sh"
 CONFIGURE_SCRIPT="${ROOT}/scripts/configure_services.sh"
 START_SCRIPT="${ROOT}/scripts/start_services.sh"
@@ -17,7 +18,7 @@ PROMETHEUS_CONF="${ROOT}/config/prometheus.yml"
 
 for file in \
     "$SERVER_TEMPLATE" "$AGENT_TEMPLATE" "$SERVER_RC" "$AGENT_RC" \
-    "$INSTALL_SCRIPT" "$INIT_SCRIPT" "$CONFIGURE_SCRIPT" "$START_SCRIPT" \
+    "$INSTALL_SCRIPT" "$INSTALL_PACKAGES_SCRIPT" "$INIT_SCRIPT" "$CONFIGURE_SCRIPT" "$START_SCRIPT" \
     "$PROMETHEUS_CONF"
 do
     [ -r "$file" ] || die "missing or unreadable Stork file: $file"
@@ -63,6 +64,18 @@ grep -q 'https://gitlab\.isc\.org/isc-projects/stork\.git' "$INSTALL_SCRIPT" || 
     die "Stork installer does not use the official ISC source"
 grep -q 'STORK_VERSION="${STORK_VERSION:-2\.5\.0}"' "$INSTALL_SCRIPT" || \
     die "Stork installer does not pin the supported version"
+grep -q 'https://dl\.cloudsmith\.io/public/isc/stork-dev/' "$INSTALL_PACKAGES_SCRIPT" || \
+    die "Stork agent package installer does not use ISC Cloudsmith"
+grep -q 'sha256 -q' "$INSTALL_PACKAGES_SCRIPT" || \
+    die "Stork agent package installer does not verify package checksums"
+grep -q 'STORK_AGENT_PACKAGE_ARCH.*amd64.*arm64' "$INSTALL_PACKAGES_SCRIPT" || \
+    die "Stork agent package installer does not constrain package architecture"
+for package_extension in deb rpm apk; do
+    grep -q "isc-stork-agent.*\\.${package_extension}" "$INSTALL_PACKAGES_SCRIPT" || \
+        die "Stork agent package installer is missing ${package_extension} support"
+done
+grep -q 'install_stork_agent_packages\.sh' "$INSTALL_SCRIPT" || \
+    die "Stork source installer does not populate its Linux package directory"
 grep -q 'KEA_API_USER="${KEA_API_USER:-stork-control-plane}"' "$CONFIGURE_SCRIPT" || \
     die "default Kea API username is not discoverable by the Stork agent"
 grep -q 'CREATE EXTENSION IF NOT EXISTS pgcrypto' "$INIT_SCRIPT" || \
