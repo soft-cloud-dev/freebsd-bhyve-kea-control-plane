@@ -39,6 +39,19 @@ grep -q 'procname="/usr/sbin/daemon"' "$SERVER_RC" || \
     die "Stork server rc.d supervision PID is checked against the wrong process"
 grep -q 'procname="/usr/sbin/daemon"' "$AGENT_RC" || \
     die "Stork agent rc.d supervision PID is checked against the wrong process"
+if grep -q '^stork_server_program=' "$SERVER_RC"; then
+    die "stork_server_program overrides rc.subr's daemon command"
+fi
+if grep -q '^stork_agent_program=' "$AGENT_RC"; then
+    die "stork_agent_program overrides rc.subr's daemon command"
+fi
+grep -q '^stork_server_binary="/usr/local/bin/stork-server"$' "$SERVER_RC" || \
+    die "Stork server binary is not assigned without an rc.subr override"
+grep -q '^stork_agent_binary="/usr/local/bin/stork-agent"$' "$AGENT_RC" || \
+    die "Stork agent binary is not assigned without an rc.subr override"
+if grep -Eq '^(STORK_LOG_LEVEL|CLICOLOR)=' "$SERVER_TEMPLATE" "$AGENT_TEMPLATE"; then
+    die "unsupported logging variables are present in a Stork environment file"
+fi
 grep -q '127\.0\.0\.1:9547' "$PROMETHEUS_CONF" || \
     die "Prometheus does not scrape the Stork Kea exporter"
 
