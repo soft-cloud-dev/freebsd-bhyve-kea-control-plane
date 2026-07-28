@@ -30,6 +30,7 @@ KEA_HOST_DB_NAME ?= kea_hosts
 KEA_HOST_DB_USER ?= kea_hosts
 KEA_HOST_DB_PASSWORD_FILE ?= /usr/local/etc/kea/kea-host-db-password
 KEA_PORTS_DIR ?= /usr/ports
+KEA_PORTS_FALLBACK_DIR ?= /var/cache/control-plane/ports
 POSTGRES_EXPORTER_DSN ?=
 PF_ROLLBACK_TIMEOUT ?= 120
 LOKI_READY_TIMEOUT ?= 60
@@ -86,7 +87,7 @@ install: check-root check-platform check-trust syntax install-dependencies confi
 	@echo "[+] SSH login: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
 
 install-dependencies:
-	@STORK_ENABLE="${STORK_ENABLE}" STORK_VERSION="${STORK_VERSION}" STORK_GIT_COMMIT="${STORK_GIT_COMMIT}" STORK_SOURCE_DIR="${STORK_SOURCE_DIR}" KEA_PORTS_DIR="${KEA_PORTS_DIR}" sh scripts/02_install_dependencies.sh
+	@STORK_ENABLE="${STORK_ENABLE}" STORK_VERSION="${STORK_VERSION}" STORK_GIT_COMMIT="${STORK_GIT_COMMIT}" STORK_SOURCE_DIR="${STORK_SOURCE_DIR}" KEA_PORTS_DIR="${KEA_PORTS_DIR}" KEA_PORTS_FALLBACK_DIR="${KEA_PORTS_FALLBACK_DIR}" sh scripts/02_install_dependencies.sh
 
 configure-host:
 	@EXT_IF="${EXT_IF}" MGMT_IF="${MGMT_IF}" LAN_IF="${LAN_IF}" MGMT_ADDR="${MGMT_ADDR}" VM_DATASET="${VM_DATASET}" MGMT_GROUP="${MGMT_GROUP}" MGMT_USER="${MGMT_USER}" SSH_ADMIN_KEY_FILE="${SSH_ADMIN_KEY_FILE}" SSH_ADMIN_AUTHORIZED_KEY="${SSH_ADMIN_AUTHORIZED_KEY}" sh scripts/01_host_setup.sh

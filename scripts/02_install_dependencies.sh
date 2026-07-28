@@ -9,6 +9,7 @@ STORK_VERSION="${STORK_VERSION:-2.5.0}"
 STORK_GIT_COMMIT="${STORK_GIT_COMMIT:-43f1450d1260ce58c2c6c973b72199b6c6592513}"
 STORK_SOURCE_DIR="${STORK_SOURCE_DIR:-}"
 KEA_PORTS_DIR="${KEA_PORTS_DIR:-/usr/ports}"
+KEA_PORTS_FALLBACK_DIR="${KEA_PORTS_FALLBACK_DIR:-/var/cache/control-plane/ports}"
 
 case "$STORK_ENABLE" in
     yes|no) ;;
@@ -52,9 +53,23 @@ if ! kea_hooks_available; then
 
     if [ ! -f "${KEA_PORTS_DIR}/net/kea/Makefile" ]; then
         if [ -e "$KEA_PORTS_DIR" ]; then
-            die "${KEA_PORTS_DIR}/net/kea is unavailable; repair or remove the incomplete ports tree, then retry"
+            echo "${KEA_PORTS_DIR} is incomplete; preserving it and using ${KEA_PORTS_FALLBACK_DIR}."
+            KEA_PORTS_DIR="$KEA_PORTS_FALLBACK_DIR"
         fi
-        git clone --depth 1 https://git.FreeBSD.org/ports.git "$KEA_PORTS_DIR"
+
+        if [ ! -f "${KEA_PORTS_DIR}/net/kea/Makefile" ]; then
+            if [ -e "$KEA_PORTS_DIR" ]; then
+                die "${KEA_PORTS_DIR} is also incomplete; set KEA_PORTS_DIR to a complete ports tree"
+            fi
+            case "$KEA_PORTS_DIR" in
+                /*) ;;
+                *) die "KEA_PORTS_DIR must be an absolute path" ;;
+            esac
+            ports_parent=${KEA_PORTS_DIR%/*}
+            [ -n "$ports_parent" ] || ports_parent=/
+            install -d -m 0755 "$ports_parent"
+            git clone --depth 1 https://git.FreeBSD.org/ports.git "$KEA_PORTS_DIR"
+        fi
     fi
 
     make -C "${KEA_PORTS_DIR}/net/kea" \

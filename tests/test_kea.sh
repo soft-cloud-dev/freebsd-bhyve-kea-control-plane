@@ -21,6 +21,8 @@ ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT:-${ROOT}/scripts/rollback_vm.sh}"
 
 grep -Eq 'git clone --depth 1 https://git.FreeBSD.org/ports.git' "$DEPENDENCY_SCRIPT" || \
     die "dependency installer does not fetch a ports tree for the Kea fallback build"
+grep -Eq 'preserving it and using.*KEA_PORTS_FALLBACK_DIR' "$DEPENDENCY_SCRIPT" || \
+    die "dependency installer does not preserve an incomplete primary ports tree"
 grep -Eq 'DEFAULT_VERSIONS=pgsql=16' "$DEPENDENCY_SCRIPT" || \
     die "Kea fallback build is not pinned to the deployed PostgreSQL major version"
 grep -Eq 'OPTIONS_SET=PGSQL' "$DEPENDENCY_SCRIPT" || \

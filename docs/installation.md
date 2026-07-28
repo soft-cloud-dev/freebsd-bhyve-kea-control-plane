@@ -27,7 +27,7 @@ make install \
 
 The default installation builds Stork `v2.5.0` from ISC’s official source. This requires more build time and temporary disk space than the other package-based stages. To omit the Kea dashboard, add `STORK_ENABLE=no`.
 
-Stork host editing requires a writable Kea hosts database. The standard FreeBSD Kea package has its `PGSQL` option disabled. When the required hook is missing, the dependency stage now clones the FreeBSD ports tree into `/usr/ports` and rebuilds `net/kea` automatically with `PGSQL` enabled. It also pins the ports build to PostgreSQL 16, matching the server installed by this project. Allow extra time and disk space on the first run.
+Stork host editing requires a writable Kea hosts database. The standard FreeBSD Kea package has its `PGSQL` option disabled. When the required hook is missing, the dependency stage clones the FreeBSD ports tree and rebuilds `net/kea` automatically with `PGSQL` enabled. It uses `/usr/ports` when that path is absent or already contains a complete ports tree. If `/usr/ports` exists but is incomplete, it is preserved and a managed tree at `/var/cache/control-plane/ports` is used instead. The build is pinned to PostgreSQL 16, matching the server installed by this project. Allow extra time and disk space on the first run.
 
 Use a different existing ports tree by setting `KEA_PORTS_DIR`:
 
@@ -35,7 +35,7 @@ Use a different existing ports tree by setting `KEA_PORTS_DIR`:
 make install-dependencies KEA_PORTS_DIR=/path/to/ports
 ```
 
-The dependency stage verifies `libdhcp_pgsql.so`, `libdhcp_host_cmds.so`, and `libdhcp_subnet_cmds.so` after the build and stops if any required library is still unavailable. If `/usr/ports` already exists but is incomplete, repair or remove that incomplete tree before retrying. This deployment does not load the mutually exclusive `cb_cmds` hook.
+The dependency stage verifies `libdhcp_pgsql.so`, `libdhcp_host_cmds.so`, and `libdhcp_subnet_cmds.so` after the build and stops if any required library is still unavailable. Override the managed fallback location with `KEA_PORTS_FALLBACK_DIR` if necessary. This deployment does not load the mutually exclusive `cb_cmds` hook.
 
 The installer does not attach the physical external interface directly to the VM switch. It creates a manual vm-bhyve switch backed by the existing `LAN_IF` bridge, preserving the intended network boundary.
 
