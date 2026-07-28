@@ -174,6 +174,8 @@ if [ "$STORK_ENABLE" = yes ]; then
     chown root:stork-server /usr/local/etc/stork/server.env "$STORK_DB_PASSWORD_FILE"
     chown root:stork-agent /usr/local/etc/stork/agent.env
 
+    install -d -m 0755 /var/lib
+    chmod 0755 /var/lib
     install -d -m 0700 -o stork-agent -g stork-agent \
         /var/lib/stork-agent \
         /var/lib/stork-agent/certs \
@@ -185,6 +187,9 @@ if [ "$STORK_ENABLE" = yes ]; then
         /var/lib/stork-agent/tokens
     find /var/lib/stork-agent/certs /var/lib/stork-agent/tokens \
         -type f -exec chmod 0600 {} +
+    install -d -m 0755 \
+        /usr/local/lib/stork-agent/hooks \
+        /usr/local/lib/stork-server/hooks
     install -d -m 0755 /var/log/stork
     touch /var/log/stork/server.log /var/log/stork/agent.log
     chown stork-server:stork-server /var/log/stork/server.log

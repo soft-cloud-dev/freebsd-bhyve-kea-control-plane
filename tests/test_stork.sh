@@ -35,6 +35,10 @@ grep -q '^STORK_AGENT_PORT=8081$' "$AGENT_TEMPLATE" || \
     die "Stork agent must avoid the server's port 8080"
 grep -q '^STORK_AGENT_PROMETHEUS_KEA_EXPORTER_ADDRESS=127\.0\.0\.1$' "$AGENT_TEMPLATE" || \
     die "Stork Kea exporter is not loopback-bound"
+grep -q '^STORK_AGENT_HOOK_DIRECTORY=/usr/local/lib/stork-agent/hooks$' "$AGENT_TEMPLATE" || \
+    die "Stork agent hook directory does not follow the FreeBSD local prefix"
+grep -q '^STORK_SERVER_HOOK_DIRECTORY=/usr/local/lib/stork-server/hooks$' "$SERVER_TEMPLATE" || \
+    die "Stork server hook directory does not follow the FreeBSD local prefix"
 grep -q 'procname="/usr/sbin/daemon"' "$SERVER_RC" || \
     die "Stork server rc.d supervision PID is checked against the wrong process"
 grep -q 'procname="/usr/sbin/daemon"' "$AGENT_RC" || \
@@ -78,6 +82,10 @@ grep -q 'chown -R stork-agent:stork-agent /var/lib/stork-agent' "$CONFIGURE_SCRI
     die "Stork configuration does not repair existing agent state ownership"
 grep -q 'chown -R stork-agent:stork-agent /var/lib/stork-agent' "$START_SCRIPT" || \
     die "Stork startup does not repair existing agent state ownership"
+grep -q 'chmod 0755 /var/lib' "$CONFIGURE_SCRIPT" || \
+    die "Stork configuration does not make the agent state parent traversable"
+grep -q '/usr/local/lib/stork-agent/hooks' "$INSTALL_SCRIPT" || \
+    die "Stork installer does not create the configured agent hook directory"
 grep -q 'http://${MGMT_ADDR}:8080/' "$START_SCRIPT" || \
     die "Stork UI readiness is not checked"
 

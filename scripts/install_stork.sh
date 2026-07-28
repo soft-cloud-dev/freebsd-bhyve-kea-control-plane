@@ -75,6 +75,10 @@ install -m 0755 "${agent_dist}/usr/local/bin/stork-agent" /usr/local/bin/stork-a
 install -d -m 0755 /usr/local/share/stork
 cp -R "${server_dist}/usr/share/stork/www" /usr/local/share/stork/
 
+install -d -m 0755 \
+    /usr/local/lib/stork-agent/hooks \
+    /usr/local/lib/stork-server/hooks
+
 install -d -m 0755 /usr/local/share/man/man8
 install -m 0644 "${server_dist}/usr/share/man/man8/stork-server.8" /usr/local/share/man/man8/
 install -m 0644 "${server_dist}/usr/share/man/man8/stork-tool.8" /usr/local/share/man/man8/
