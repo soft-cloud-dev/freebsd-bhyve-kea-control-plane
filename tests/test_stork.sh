@@ -86,6 +86,10 @@ grep -q 'chmod 0755 /var/lib' "$CONFIGURE_SCRIPT" || \
     die "Stork configuration does not make the agent state parent traversable"
 grep -q '/usr/local/lib/stork-agent/hooks' "$INSTALL_SCRIPT" || \
     die "Stork installer does not create the configured agent hook directory"
+grep -q 'install -d -m 0755 /usr/local/share/stork/www/assets/pkgs' "$INSTALL_SCRIPT" || \
+    die "Stork installer does not create the optional Linux agent package directory"
+grep -q 'install -d -m 0755 /usr/local/share/stork/www/assets/pkgs' "$CONFIGURE_SCRIPT" || \
+    die "Stork configuration does not repair the Linux agent package directory"
 grep -q 'http://${MGMT_ADDR}:8080/' "$START_SCRIPT" || \
     die "Stork UI readiness is not checked"
 

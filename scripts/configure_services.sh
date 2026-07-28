@@ -211,6 +211,7 @@ if [ "$STORK_ENABLE" = yes ]; then
     install -d -m 0755 \
         /usr/local/lib/stork-agent/hooks \
         /usr/local/lib/stork-server/hooks
+    install -d -m 0755 /usr/local/share/stork/www/assets/pkgs
     install -d -m 0755 /var/log/stork
     touch /var/log/stork/server.log /var/log/stork/agent.log
     chown stork-server:stork-server /var/log/stork/server.log

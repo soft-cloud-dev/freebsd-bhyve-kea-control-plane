@@ -29,6 +29,7 @@ if command -v stork-server >/dev/null 2>&1 && \
     command -v stork-agent >/dev/null 2>&1 && \
     command -v stork-tool >/dev/null 2>&1 && \
     stork-server --version 2>&1 | grep -Fq "${STORK_VERSION}"; then
+    install -d -m 0755 /usr/local/share/stork/www/assets/pkgs
     echo "[*] Stork ${STORK_VERSION} is already installed."
     exit 0
 fi
@@ -74,6 +75,7 @@ install -m 0755 "${agent_dist}/usr/local/bin/stork-agent" /usr/local/bin/stork-a
 
 install -d -m 0755 /usr/local/share/stork
 cp -R "${server_dist}/usr/share/stork/www" /usr/local/share/stork/
+install -d -m 0755 /usr/local/share/stork/www/assets/pkgs
 
 install -d -m 0755 \
     /usr/local/lib/stork-agent/hooks \
