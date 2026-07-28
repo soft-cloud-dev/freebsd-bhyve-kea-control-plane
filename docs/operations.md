@@ -18,14 +18,18 @@ For automation, `SSH_AUTHORIZED_KEY` may contain the complete public-key line di
 
 The operation succeeds only after:
 
-1. vm-bhyve creates the guest;
-2. a `cidata` NoCloud seed ISO is created as `seed.iso` in the guest directory;
-3. PostgreSQL allocates and records the address;
-4. Kea accepts the reservation;
-5. the VM starts; and
-6. the inventory row is marked `running`.
+1. PostgreSQL confirms that the name has no non-archived inventory row;
+2. vm-bhyve confirms that no guest already uses the name and creates the guest;
+3. a `cidata` NoCloud seed ISO is created as `seed.iso` in the guest directory;
+4. PostgreSQL allocates and records the address;
+5. Kea accepts the reservation;
+6. the VM starts; and
+7. the inventory row is marked `running`.
 
 Earlier failures trigger compensating cleanup of temporary seed inputs, Kea, PostgreSQL, IPAM, and vm-bhyve state.
+An existing active name is never replaced automatically. Inspect it and, when removal is intended, run
+`scripts/rollback_vm.sh` before retrying provisioning. Rollback also completes when the Kea reservation
+or vm-bhyve guest is already absent, which permits cleanup of a stale inventory row.
 
 The guest image must include cloud-init with the NoCloud datasource enabled. The selected vm-bhyve template must attach `seed.iso` as a CD-ROM.
 

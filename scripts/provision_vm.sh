@@ -93,6 +93,27 @@ esac
 require_root
 require_commands vm psql curl jq zfs mktemp
 
+escaped_name=$(sql_literal "$VM_NAME")
+active_vm=$(psql -X -v ON_ERROR_STOP=1 -qAt -F '|' <<SQL
+SELECT status, ip_address, mac_address, dataset
+  FROM vms
+ WHERE name = '${escaped_name}'
+   AND status <> 'archived'
+ ORDER BY created_at DESC
+ LIMIT 1;
+SQL
+)
+if [ -n "$active_vm" ]; then
+    IFS='|' read -r active_status active_ip active_mac active_dataset <<EOF
+$active_vm
+EOF
+    die "VM '${VM_NAME}' already exists in active inventory (status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}); inspect it first, then deprovision it with scripts/rollback_vm.sh or choose another name"
+fi
+
+if vm info "$VM_NAME" >/dev/null 2>&1; then
+    die "vm-bhyve guest '${VM_NAME}' already exists without an active inventory row; reconcile or explicitly destroy that guest before provisioning"
+fi
+
 [ -r "$KEA_API_USER_FILE" ] || die "missing Kea API user file: $KEA_API_USER_FILE"
 [ -r "$KEA_API_PASSWORD_FILE" ] || die "missing Kea API password file: $KEA_API_PASSWORD_FILE"
 KEA_API_USER=$(sed -n '1p' "$KEA_API_USER_FILE")
@@ -216,7 +237,6 @@ rm -rf "$seed_dir"
 seed_dir=""
 
 echo "[4/7] Allocating address and recording inventory"
-escaped_name=$(sql_literal "$VM_NAME")
 escaped_owner=$(sql_literal "$VM_OWNER")
 escaped_template=$(sql_literal "$TEMPLATE")
 escaped_pool=$(sql_literal "$IPAM_POOL")

@@ -39,6 +39,58 @@ grep -Eq 'command:"reservation-add"' "$PROVISION_SCRIPT" || \
     die "VM provisioner does not use Kea reservation-add"
 grep -Eq 'command:"reservation-del"' "$ROLLBACK_SCRIPT" || \
     die "VM rollback does not use Kea reservation-del"
+grep -Eq "status <> 'archived'" "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not reject an active inventory name"
+preflight_line=$(grep -n 'active_vm=.*psql' "$PROVISION_SCRIPT" | sed -n '1s/:.*//p')
+create_line=$(grep -n 'vm create -t' "$PROVISION_SCRIPT" | sed -n '1s/:.*//p')
+[ -n "$preflight_line" ] && [ -n "$create_line" ] && [ "$preflight_line" -lt "$create_line" ] || \
+    die "VM inventory preflight must run before vm-bhyve creation"
+grep -Eq 'delete_result.*-eq 3' "$ROLLBACK_SCRIPT" || \
+    die "VM rollback does not tolerate an already-absent Kea reservation"
+grep -Eq 'if vm info "\$VM_NAME"' "$ROLLBACK_SCRIPT" || \
+    die "VM rollback does not tolerate an already-absent vm-bhyve guest"
+
+preflight_dir=$(mktemp -d)
+trap 'rm -rf "$preflight_dir"' EXIT HUP INT TERM
+mock_bin="${preflight_dir}/bin"
+mkdir "$mock_bin"
+
+for mock_command in curl jq mktemp zfs; do
+    printf '#!/bin/sh\nexit 99\n' > "${mock_bin}/${mock_command}"
+    chmod +x "${mock_bin}/${mock_command}"
+done
+cat > "${mock_bin}/id" <<'EOF'
+#!/bin/sh
+[ "${1:-}" = "-u" ] && {
+    printf '0\n'
+    exit 0
+}
+exit 99
+EOF
+cat > "${mock_bin}/psql" <<'EOF'
+#!/bin/sh
+printf '%s\n' 'running|10.0.20.10|58:9c:fc:0b:cb:64|zroot/vm/db-node-01'
+EOF
+cat > "${mock_bin}/vm" <<'EOF'
+#!/bin/sh
+: > "$VM_CALL_LOG"
+exit 99
+EOF
+chmod +x "${mock_bin}/id" "${mock_bin}/psql" "${mock_bin}/vm"
+
+if PATH="${mock_bin}:${PATH}" \
+    VM_CALL_LOG="${preflight_dir}/vm-called" \
+    sh "$PROVISION_SCRIPT" db-node-01 freebsd \
+    >"${preflight_dir}/output" 2>&1; then
+    die "VM provisioner accepted an active inventory name"
+fi
+grep -q "already exists in active inventory" "${preflight_dir}/output" || \
+    die "VM provisioner did not explain the active inventory conflict"
+[ ! -e "${preflight_dir}/vm-called" ] || \
+    die "VM provisioner contacted vm-bhyve before rejecting the active inventory name"
+
+rm -rf "$preflight_dir"
+trap - EXIT HUP INT TERM
 
 if command -v jq >/dev/null 2>&1; then
     jq -e '

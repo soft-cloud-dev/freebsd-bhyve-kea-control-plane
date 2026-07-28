@@ -57,13 +57,19 @@ delete_payload=$(jq -n \
     }')
 delete_response=$(kea_request "$delete_payload")
 delete_result=$(printf '%s' "$delete_response" | jq -er '.[0].result')
-[ "$delete_result" -eq 0 ] || {
+if [ "$delete_result" -eq 3 ]; then
+    echo "[!] Kea reservation for ${VM_NAME} is already absent; continuing rollback" >&2
+elif [ "$delete_result" -ne 0 ]; then
     echo "ERROR: Kea reservation-del failed during rollback: $delete_response" >&2
     exit 1
-}
+fi
 
-vm stop "$VM_NAME" >/dev/null 2>&1 || true
-vm destroy -f "$VM_NAME"
+if vm info "$VM_NAME" >/dev/null 2>&1; then
+    vm stop "$VM_NAME" >/dev/null 2>&1 || true
+    vm destroy -f "$VM_NAME"
+else
+    echo "[!] vm-bhyve guest ${VM_NAME} is already absent; continuing rollback" >&2
+fi
 
 psql -X -v ON_ERROR_STOP=1 -qAt <<SQL >/dev/null
 BEGIN;
