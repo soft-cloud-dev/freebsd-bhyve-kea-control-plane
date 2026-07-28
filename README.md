@@ -29,7 +29,7 @@ node_exporter + postgres_exporter + Stork Kea exporter
 Stork server (management TCP/8080) <---- Stork agent (loopback TCP/8081)
 ```
 
-PostgreSQL is the authoritative inventory. Kea is the runtime DHCP service. Unbound provides validating, recursive DNS to the VM LAN on `10.0.20.1` only. The provisioner coordinates PostgreSQL and Kea and rolls back partial changes. Stork provides the Kea operations dashboard and uses a separate PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana and Stork are exposed only on the management VLAN.
+PostgreSQL is the authoritative inventory. Kea is the runtime DHCP service. Unbound provides validating, recursive DNS to the VM LAN on `10.0.20.1` only. The FreeBSD host forwards and NATs VM traffic through the external interface while PF blocks the VM LAN from the management network and host services other than DHCP, DNS, and ICMP. The provisioner coordinates PostgreSQL and Kea and rolls back partial changes. Stork provides the Kea operations dashboard and uses a separate PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana and Stork are exposed only on the management VLAN.
 
 ## Repository layout
 

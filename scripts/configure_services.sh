@@ -257,7 +257,8 @@ for dashboard in config/grafana/provisioning/dashboards/json/*.json; do
     install -m 0644 "$dashboard" /usr/local/etc/grafana/provisioning/dashboards/json/
 done
 
-sysrc pf_enable=YES pflog_enable=YES jail_enable=YES >/dev/null
+sysrc gateway_enable=YES pf_enable=YES pflog_enable=YES jail_enable=YES >/dev/null
+sysctl net.inet.ip.forwarding=1 >/dev/null
 sysrc -x named_enable >/dev/null 2>&1 || true
 sysrc -x named_conf >/dev/null 2>&1 || true
 sysrc local_unbound_enable=NO >/dev/null

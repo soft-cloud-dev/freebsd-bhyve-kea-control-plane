@@ -167,7 +167,10 @@ if command -v sysrc >/dev/null 2>&1; then
     done
     sysrc "ifconfig_${MGMT_IF}=inet ${MGMT_ADDR}/24 vlan ${MGMT_VLAN} vlandev ${EXT_IF} mtu 1496" >/dev/null 2>&1 || true
     sysrc "ifconfig_${LAN_IF}=inet ${LAN_ADDR}/24 mtu 1496 up" >/dev/null 2>&1 || true
+    sysrc gateway_enable=YES >/dev/null
 fi
+
+sysctl net.inet.ip.forwarding=1 >/dev/null
 
 echo "[+] Host setup complete"
 echo "[+] SSH login: ssh -i <private-key> ${MGMT_USER}@<management-address>"

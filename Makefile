@@ -57,6 +57,7 @@ lint: syntax
 	@if command -v shellcheck >/dev/null 2>&1; then shellcheck -s sh ${SCRIPTS} ${TESTS}; else echo "shellcheck unavailable; syntax passed"; fi
 
 test: lint
+	@sh tests/test_pf.sh
 	@sh tests/test_kea.sh
 	@sh tests/test_unbound.sh
 	@sh tests/test_observability.sh
