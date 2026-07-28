@@ -132,7 +132,7 @@ container list
 
 The complete sequence is documented in `docs/installation.md` and `docs/observability.md`.
 
-Stork is enabled by default. Its server and agent are built from the pinned official ISC `v2.5.0` source because ISC does not publish native FreeBSD packages. Set `STORK_ENABLE=no` to omit it. After startup, open `http://10.0.10.2:8080` from management or `http://10.0.20.1:8080` from the VM LAN, sign in with the initial `admin` / `admin` credentials, change the password immediately, and authorize the pending local agent under **Services → Machines → Unauthorized**.
+Stork is enabled by default. Its server and agent are built from the pinned official ISC `v2.5.0` source because ISC does not publish native FreeBSD packages. Set `STORK_ENABLE=no` to omit it. After startup, open `http://10.0.10.2:8080` from either trusted subnet, sign in with the initial `admin` / `admin` credentials, change the password immediately, and authorize the pending local agent under **Services → Machines → Unauthorized**.
 
 ## Provisioning
 

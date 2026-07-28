@@ -12,10 +12,10 @@ grep -Eq '^block in quick on \$lan_if inet from \$lan_net to \$mgmt_net$' "$CONF
     die "PF must isolate the VM LAN from the management network"
 grep -Eq '^pass in quick on \$lan_if inet from \$lan_net to any keep state$' "$CONF" || \
     die "PF must permit routed VM LAN traffic"
-grep -Eq '^pass in quick on \$lan_if proto tcp from \$lan_net to \(\$lan_if\) port 8080 keep state$' "$CONF" || \
+grep -Eq '^pass in quick on \$lan_if proto tcp from \$lan_net to \(\$mgmt_if\) port 8080 keep state$' "$CONF" || \
     die "PF must expose Stork to the VM LAN"
 awk '
-    /^pass in quick on \$lan_if proto tcp from \$lan_net to \(\$lan_if\) port 8080 keep state$/ {
+    /^pass in quick on \$lan_if proto tcp from \$lan_net to \(\$mgmt_if\) port 8080 keep state$/ {
         stork_allow = NR
     }
     /^block in quick on \$lan_if inet from \$lan_net to self$/ {

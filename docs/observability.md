@@ -11,7 +11,7 @@ Prometheus self-metrics ----------+                              |
 Promtail 127.0.0.1:9080 (/var/log/*) --> Loki 127.0.0.1:3100 -> Grafana 10.0.10.2:3000
 ```
 
-Prometheus, Loki, Promtail, and all exporters bind to loopback. Grafana is exposed only on the management VLAN. Stork listens on all host addresses, while PF permits TCP/8080 only from `mgmt_net` on the management interface and `lan_net` on the VM-LAN interface.
+Prometheus, Loki, Promtail, and all exporters bind to loopback. Grafana is exposed only on the management VLAN. Stork binds to its canonical management address, while PF permits `lan_net` clients arriving on the VM-LAN interface to reach TCP/8080 at that address.
 
 ## Install configuration
 
@@ -73,7 +73,7 @@ grafana cli --config /usr/local/etc/grafana/grafana.ini admin reset-admin-passwo
 Expected bindings:
 
 - Grafana: management address, TCP/3000
-- Stork dashboard: management and VM-LAN addresses, TCP/8080
+- Stork dashboard: management address from management and VM-LAN clients, TCP/8080
 - Stork agent: `127.0.0.1:8081`
 - Prometheus: `127.0.0.1:9090`
 - Loki: `127.0.0.1:3100`
