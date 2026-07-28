@@ -121,6 +121,18 @@ if [ "$STORK_ENABLE" = yes ]; then
     [ -x /usr/local/etc/rc.d/stork_agent ] || \
         die "Stork agent rc.d service is missing; run the dependency and configuration stages"
 
+    install -d -m 0700 -o stork-agent -g stork-agent \
+        /var/lib/stork-agent \
+        /var/lib/stork-agent/certs \
+        /var/lib/stork-agent/tokens
+    chown -R stork-agent:stork-agent /var/lib/stork-agent
+    chmod 0700 \
+        /var/lib/stork-agent \
+        /var/lib/stork-agent/certs \
+        /var/lib/stork-agent/tokens
+    find /var/lib/stork-agent/certs /var/lib/stork-agent/tokens \
+        -type f -exec chmod 0600 {} +
+
     service stork_server restart 2>/dev/null || \
         service stork_server start || \
         die "failed to start Stork server; check /var/log/stork/server.log"

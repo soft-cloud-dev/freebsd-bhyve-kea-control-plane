@@ -74,6 +74,10 @@ grep -q 'pw groupmod stork -m stork-agent' "$CONFIGURE_SCRIPT" || \
     die "Stork agent cannot traverse the shared configuration directory"
 grep -q 'chown root:stork /usr/local/etc/stork' "$CONFIGURE_SCRIPT" || \
     die "Stork configuration directory does not use the shared service group"
+grep -q 'chown -R stork-agent:stork-agent /var/lib/stork-agent' "$CONFIGURE_SCRIPT" || \
+    die "Stork configuration does not repair existing agent state ownership"
+grep -q 'chown -R stork-agent:stork-agent /var/lib/stork-agent' "$START_SCRIPT" || \
+    die "Stork startup does not repair existing agent state ownership"
 grep -q 'http://${MGMT_ADDR}:8080/' "$START_SCRIPT" || \
     die "Stork UI readiness is not checked"
 

@@ -178,6 +178,13 @@ if [ "$STORK_ENABLE" = yes ]; then
         /var/lib/stork-agent \
         /var/lib/stork-agent/certs \
         /var/lib/stork-agent/tokens
+    chown -R stork-agent:stork-agent /var/lib/stork-agent
+    chmod 0700 \
+        /var/lib/stork-agent \
+        /var/lib/stork-agent/certs \
+        /var/lib/stork-agent/tokens
+    find /var/lib/stork-agent/certs /var/lib/stork-agent/tokens \
+        -type f -exec chmod 0600 {} +
     install -d -m 0755 /var/log/stork
     touch /var/log/stork/server.log /var/log/stork/agent.log
     chown stork-server:stork-server /var/log/stork/server.log
