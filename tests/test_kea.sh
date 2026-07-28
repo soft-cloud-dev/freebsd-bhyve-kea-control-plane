@@ -14,6 +14,8 @@ ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT:-${ROOT}/scripts/rollback_vm.sh}"
 DEPROVISION_SCRIPT="${DEPROVISION_SCRIPT:-${ROOT}/scripts/deprovision_vm.sh}"
 VM_TEMPLATE="${VM_TEMPLATE:-${ROOT}/templates/vm-bhyve.conf}"
 VM_LOADER_MIGRATION_SCRIPT="${VM_LOADER_MIGRATION_SCRIPT:-${ROOT}/scripts/migrate_vm_to_bhyveload.sh}"
+FREEBSD_JAIL_PROVISION_SCRIPT="${FREEBSD_JAIL_PROVISION_SCRIPT:-${ROOT}/scripts/provision_freebsd_jail_node.sh}"
+FREEBSD_JAIL_PROFILE="${FREEBSD_JAIL_PROFILE:-${ROOT}/config/cloud-init/freebsd-jail-node.yaml}"
 
 . "${ROOT}/scripts/lib.sh"
 
@@ -24,6 +26,8 @@ VM_LOADER_MIGRATION_SCRIPT="${VM_LOADER_MIGRATION_SCRIPT:-${ROOT}/scripts/migrat
 [ -r "$DEPROVISION_SCRIPT" ] || die "missing VM deprovision script"
 [ -r "$VM_TEMPLATE" ] || die "missing vm-bhyve template"
 [ -r "$VM_LOADER_MIGRATION_SCRIPT" ] || die "missing VM loader migration script"
+[ -r "$FREEBSD_JAIL_PROVISION_SCRIPT" ] || die "missing FreeBSD jail-node provisioner"
+[ -r "$FREEBSD_JAIL_PROFILE" ] || die "missing FreeBSD jail-node cloud-init profile"
 
 grep -Eq 'git clone --depth 1 https://git.FreeBSD.org/ports.git' "$DEPENDENCY_SCRIPT" || \
     die "dependency installer does not fetch a ports tree for the Kea fallback build"
@@ -77,6 +81,18 @@ start_line=$(grep -n 'vm start "\$VM_NAME"$' "$PROVISION_SCRIPT" | sed -n '1s/:.
     die "VM provisioner must enforce bhyveload before first start"
 grep -Eq 'cp -p "\$config_backup" "\$VM_CONFIG"' "$VM_LOADER_MIGRATION_SCRIPT" || \
     die "VM loader migration does not restore its configuration backup on failure"
+grep -Eq 'CLOUD_INIT_EXTRA_FILE=.*PROFILE_FILE' "$FREEBSD_JAIL_PROVISION_SCRIPT" || \
+    die "FreeBSD jail-node provisioner does not attach its cloud-init profile"
+grep -Eq 'provision_vm.sh.*freebsd' "$FREEBSD_JAIL_PROVISION_SCRIPT" || \
+    die "FreeBSD jail-node provisioner does not use the bhyveload FreeBSD profile"
+grep -Eq 'wireguard-tools' "$FREEBSD_JAIL_PROFILE" || \
+    die "FreeBSD jail-node profile does not install WireGuard tooling"
+grep -Eq 'jail_enable=YES' "$FREEBSD_JAIL_PROFILE" || \
+    die "FreeBSD jail-node profile does not enable native jails"
+grep -Eq 'kld_list\+=if_wg' "$FREEBSD_JAIL_PROFILE" || \
+    die "FreeBSD jail-node profile does not persist the WireGuard kernel module"
+grep -Eq 'CLOUD_INIT_EXTRA_FILE' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not support a cloud-init extension"
 
 preflight_dir=$(mktemp -d)
 trap 'rm -rf "$preflight_dir"' EXIT HUP INT TERM

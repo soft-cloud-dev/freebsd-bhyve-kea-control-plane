@@ -44,6 +44,32 @@ sudo sh scripts/migrate_vm_to_bhyveload.sh db-node-03
 
 The migration restores the original configuration and restarts the previous loader if changing the loader or restarting the VM fails.
 
+## Provision a FreeBSD WireGuard and jail node
+
+Provision a `bhyveload` FreeBSD VM prepared with WireGuard tooling and native FreeBSD jails:
+
+```sh
+sudo PGDATABASE=inventory \
+  PGUSER=postgres \
+  IPAM_POOL=vm-lan \
+  VM_OWNER=admin \
+  CLOUD_INIT_USER=admin \
+  SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
+  sh scripts/provision_freebsd_jail_node.sh jail-node-01
+```
+
+Cloud-init installs `wireguard-tools`, persists and loads `if_wg`, enables the base-system jail service,
+and creates `/usr/local/jails`, `/etc/jail.conf.d`, and `/usr/local/etc/wireguard`. It does not generate
+WireGuard keys, invent peer addresses or routes, or create a jail. Supply those definitions separately.
+After the guest boots, verify completion with:
+
+```sh
+sudo cloud-init status --wait
+test -f /var/db/freebsd-jail-node-ready
+wg --version
+sysrc jail_enable
+```
+
 ## Deprovision a VM
 
 ```sh

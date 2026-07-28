@@ -1,0 +1,15 @@
+package_update: true
+packages:
+  - wireguard-tools
+
+runcmd:
+  - [mkdir, -p, /usr/local/jails]
+  - [mkdir, -p, /etc/jail.conf.d]
+  - [mkdir, -p, /usr/local/etc/wireguard]
+  - [sysrc, jail_enable=YES]
+  - [sysrc, jail_parallel_start=YES]
+  - [sh, -c, 'sysrc kld_list+=if_wg']
+  - [sh, -c, 'kldload if_wg >/dev/null 2>&1 || true']
+  - [sh, -c, 'command -v wg >/dev/null && test "$(sysrc -n jail_enable)" = YES && touch /var/db/freebsd-jail-node-ready']
+
+final_message: "FreeBSD WireGuard and native-jail node preparation completed after $UPTIME seconds"

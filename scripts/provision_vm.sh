@@ -10,6 +10,7 @@ VM_OWNER="${VM_OWNER:-admin}"
 CLOUD_INIT_USER="${CLOUD_INIT_USER:-${VM_OWNER}}"
 SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE:-}"
 SSH_AUTHORIZED_KEY="${SSH_AUTHORIZED_KEY:-}"
+CLOUD_INIT_EXTRA_FILE="${CLOUD_INIT_EXTRA_FILE:-}"
 IPAM_POOL="${IPAM_POOL:-vm-lan}"
 VM_DATASET="${VM_DATASET:-zroot/vm}"
 VM_ROOT="${VM_ROOT:-}"
@@ -22,6 +23,9 @@ Required cloud-init key input:
   SSH_PUBLIC_KEY_FILE=/path/to/id_ed25519.pub
 or:
   SSH_AUTHORIZED_KEY='ssh-ed25519 AAAA... comment'
+
+Optional cloud-init extension:
+  CLOUD_INIT_EXTRA_FILE=/path/to/profile.yaml
 EOF
     exit 64
 }
@@ -246,6 +250,13 @@ users:
     ssh_authorized_keys:
       - '${cloud_key}'
 EOF
+
+if [ -n "$CLOUD_INIT_EXTRA_FILE" ]; then
+    [ -r "$CLOUD_INIT_EXTRA_FILE" ] || \
+        die "cloud-init extension is not readable: $CLOUD_INIT_EXTRA_FILE"
+    printf '\n' >> "${seed_dir}/user-data"
+    cat "$CLOUD_INIT_EXTRA_FILE" >> "${seed_dir}/user-data"
+fi
 
 if command -v cloud-init >/dev/null 2>&1; then
     cloud-init schema -c "${seed_dir}/user-data" >/dev/null
