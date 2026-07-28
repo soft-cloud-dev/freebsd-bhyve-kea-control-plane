@@ -174,6 +174,7 @@ service grafana status
 - The `vm info` parser is isolated but still depends on human-readable `vm-bhyve` output.
 - Kea and Stork update reservations through `reservation-add`/`reservation-del` against a dedicated PostgreSQL hosts database.
 - The standard FreeBSD Kea package does not enable PostgreSQL support; the dependency stage automatically rebuilds `net/kea` from ports with its `PGSQL` option.
+- Production installation requires a FreeBSD release currently supported by the FreeBSD Security Team; vulnerability checks are not disabled for end-of-life hosts.
 - Stork subnet editing uses Kea's open-source `libdhcp_subnet_cmds.so` hook and therefore requires the FreeBSD Kea 3.0+ package.
 - `xattr=sa` is attempted and falls back to `xattr=on` when unsupported.
 - `volblocksize` is a zvol creation-time property and must be selected in each VM/template provisioning path.

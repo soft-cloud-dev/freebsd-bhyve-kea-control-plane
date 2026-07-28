@@ -29,6 +29,8 @@ The default installation builds Stork `v2.5.0` from ISC’s official source. Thi
 
 Stork host editing requires a writable Kea hosts database. The standard FreeBSD Kea package has its `PGSQL` option disabled. When the required hook is missing, the dependency stage clones the FreeBSD ports tree and rebuilds `net/kea` automatically with `PGSQL` enabled. It uses `/usr/ports` when that path is absent or already contains a complete ports tree. If `/usr/ports` exists but is incomplete, it is preserved and a managed tree at `/var/cache/control-plane/ports` is used instead. The build is pinned to PostgreSQL 16, matching the server installed by this project. Allow extra time and disk space on the first run.
 
+The Kea port uses `rst2man` to generate manual pages. The installer determines the port's Python flavor and installs the matching binary `py*-docutils` package before starting the ports build. This avoids building the legacy `py-setuptools` port currently flagged for CVE-2025-47273; the installer does not disable the ports vulnerability check.
+
 Use a different existing ports tree by setting `KEA_PORTS_DIR`:
 
 ```sh
@@ -36,6 +38,8 @@ make install-dependencies KEA_PORTS_DIR=/path/to/ports
 ```
 
 The dependency stage verifies `libdhcp_pgsql.so`, `libdhcp_host_cmds.so`, and `libdhcp_subnet_cmds.so` after the build and stops if any required library is still unavailable. Override the managed fallback location with `KEA_PORTS_FALLBACK_DIR` if necessary. This deployment does not load the mutually exclusive `cb_cmds` hook.
+
+Run this control plane only on a FreeBSD release currently supported by the FreeBSD Security Team. Ports may warn or fail on an end-of-life release even when a particular build dependency can be supplied safely from packages; upgrade the host rather than disabling vulnerability checks.
 
 The installer does not attach the physical external interface directly to the VM switch. It creates a manual vm-bhyve switch backed by the existing `LAN_IF` bridge, preserving the intended network boundary.
 

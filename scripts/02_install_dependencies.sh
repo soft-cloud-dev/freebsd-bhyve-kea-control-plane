@@ -72,6 +72,17 @@ if ! kea_hooks_available; then
         fi
     fi
 
+    # Kea uses rst2man while building its manual pages. Install docutils from
+    # the binary repository so the ports framework does not try to build the
+    # vulnerable legacy py-setuptools port as an indirect build dependency.
+    kea_python_flavor=$(make -C "${KEA_PORTS_DIR}/net/kea" -V PY_FLAVOR)
+    case "$kea_python_flavor" in
+        py[0-9][0-9][0-9]) ;;
+        *) die "cannot determine the Python flavor required by the Kea port" ;;
+    esac
+    pkg install -y "${kea_python_flavor}-docutils"
+    require_commands rst2man
+
     make -C "${KEA_PORTS_DIR}/net/kea" \
         -DBATCH \
         DEFAULT_VERSIONS=pgsql=16 \
