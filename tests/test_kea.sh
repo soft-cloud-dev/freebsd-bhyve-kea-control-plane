@@ -8,15 +8,25 @@ KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 KEA_RENDER_SCRIPT="${KEA_RENDER_SCRIPT:-${ROOT}/scripts/render_kea_config.sh}"
 KEA_DB_INIT_SCRIPT="${KEA_DB_INIT_SCRIPT:-${ROOT}/scripts/init_kea_host_db.sh}"
+DEPENDENCY_SCRIPT="${DEPENDENCY_SCRIPT:-${ROOT}/scripts/02_install_dependencies.sh}"
 PROVISION_SCRIPT="${PROVISION_SCRIPT:-${ROOT}/scripts/provision_vm.sh}"
 ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT:-${ROOT}/scripts/rollback_vm.sh}"
 
 . "${ROOT}/scripts/lib.sh"
 
 [ -r "$KEA_DB_INIT_SCRIPT" ] || die "missing Kea hosts database initializer"
+[ -r "$DEPENDENCY_SCRIPT" ] || die "missing dependency installer"
 [ -r "$PROVISION_SCRIPT" ] || die "missing VM provisioner"
 [ -r "$ROLLBACK_SCRIPT" ] || die "missing VM rollback script"
 
+grep -Eq 'git clone --depth 1 https://git.FreeBSD.org/ports.git' "$DEPENDENCY_SCRIPT" || \
+    die "dependency installer does not fetch a ports tree for the Kea fallback build"
+grep -Eq 'DEFAULT_VERSIONS=pgsql=16' "$DEPENDENCY_SCRIPT" || \
+    die "Kea fallback build is not pinned to the deployed PostgreSQL major version"
+grep -Eq 'OPTIONS_SET=PGSQL' "$DEPENDENCY_SCRIPT" || \
+    die "dependency installer does not enable the Kea PGSQL port option"
+grep -Eq 'reinstall clean' "$DEPENDENCY_SCRIPT" || \
+    die "dependency installer does not replace the binary Kea package"
 grep -Eq 'kea-admin db-init pgsql' "$KEA_DB_INIT_SCRIPT" || \
     die "Kea hosts database initializer does not create a PostgreSQL schema"
 grep -Eq 'command:"reservation-add"' "$PROVISION_SCRIPT" || \

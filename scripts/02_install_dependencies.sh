@@ -8,6 +8,7 @@ STORK_ENABLE="${STORK_ENABLE:-yes}"
 STORK_VERSION="${STORK_VERSION:-2.5.0}"
 STORK_GIT_COMMIT="${STORK_GIT_COMMIT:-43f1450d1260ce58c2c6c973b72199b6c6592513}"
 STORK_SOURCE_DIR="${STORK_SOURCE_DIR:-}"
+KEA_PORTS_DIR="${KEA_PORTS_DIR:-/usr/ports}"
 
 case "$STORK_ENABLE" in
     yes|no) ;;
@@ -37,10 +38,34 @@ pkg install -y \
 
 pkg install -y kea
 require_commands kea-dhcp4
-for kea_hook in libdhcp_host_cmds.so libdhcp_pgsql.so libdhcp_subnet_cmds.so; do
-    [ -r "/usr/local/lib/kea/hooks/${kea_hook}" ] || \
-        die "Kea hook ${kea_hook} is unavailable; rebuild net/kea 3.0+ with OPTIONS_SET=PGSQL"
-done
+
+kea_hooks_available()
+{
+    for kea_hook in libdhcp_host_cmds.so libdhcp_pgsql.so libdhcp_subnet_cmds.so; do
+        [ -r "/usr/local/lib/kea/hooks/${kea_hook}" ] || return 1
+    done
+}
+
+if ! kea_hooks_available; then
+    echo "The binary Kea package lacks required hooks; rebuilding net/kea with PGSQL."
+    pkg install -y git
+
+    if [ ! -f "${KEA_PORTS_DIR}/net/kea/Makefile" ]; then
+        if [ -e "$KEA_PORTS_DIR" ]; then
+            die "${KEA_PORTS_DIR}/net/kea is unavailable; repair or remove the incomplete ports tree, then retry"
+        fi
+        git clone --depth 1 https://git.FreeBSD.org/ports.git "$KEA_PORTS_DIR"
+    fi
+
+    make -C "${KEA_PORTS_DIR}/net/kea" \
+        -DBATCH \
+        DEFAULT_VERSIONS=pgsql=16 \
+        OPTIONS_SET=PGSQL \
+        reinstall clean
+fi
+
+kea_hooks_available || \
+    die "Kea was rebuilt with PGSQL but its required hook libraries are still unavailable"
 
 # The ports Unbound service is intended for serving LAN clients. Stop and
 # remove a BIND installation left by an earlier control-plane release.

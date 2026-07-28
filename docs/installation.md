@@ -27,22 +27,15 @@ make install \
 
 The default installation builds Stork `v2.5.0` from ISC’s official source. This requires more build time and temporary disk space than the other package-based stages. To omit the Kea dashboard, add `STORK_ENABLE=no`.
 
-Stork host editing requires a writable Kea hosts database. The standard FreeBSD Kea package has its `PGSQL` option disabled, so install `net/kea` 3.0 or newer from ports with PostgreSQL support before running the installer:
+Stork host editing requires a writable Kea hosts database. The standard FreeBSD Kea package has its `PGSQL` option disabled. When the required hook is missing, the dependency stage now clones the FreeBSD ports tree into `/usr/ports` and rebuilds `net/kea` automatically with `PGSQL` enabled. It also pins the ports build to PostgreSQL 16, matching the server installed by this project. Allow extra time and disk space on the first run.
+
+Use a different existing ports tree by setting `KEA_PORTS_DIR`:
 
 ```sh
-git clone --depth 1 https://git.FreeBSD.org/ports.git /usr/ports
-cd /usr/ports/net/kea
-make -DBATCH OPTIONS_SET=PGSQL install clean
+make install-dependencies KEA_PORTS_DIR=/path/to/ports
 ```
 
-If the binary package is already installed, rebuild it with the option enabled:
-
-```sh
-cd /usr/ports/net/kea
-make -DBATCH OPTIONS_SET=PGSQL reinstall clean
-```
-
-The dependency stage verifies `libdhcp_pgsql.so`, `libdhcp_host_cmds.so`, and `libdhcp_subnet_cmds.so` and stops with a clear error when the required build is unavailable. This deployment does not load the mutually exclusive `cb_cmds` hook.
+The dependency stage verifies `libdhcp_pgsql.so`, `libdhcp_host_cmds.so`, and `libdhcp_subnet_cmds.so` after the build and stops if any required library is still unavailable. If `/usr/ports` already exists but is incomplete, repair or remove that incomplete tree before retrying. This deployment does not load the mutually exclusive `cb_cmds` hook.
 
 The installer does not attach the physical external interface directly to the VM switch. It creates a manual vm-bhyve switch backed by the existing `LAN_IF` bridge, preserving the intended network boundary.
 
