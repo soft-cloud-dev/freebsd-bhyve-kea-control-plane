@@ -104,6 +104,7 @@ install -m 0600 /path/to/id_ed25519.pub /root/.ssh/bhyve-admin.pub
 The provisioner rejects non-Ed25519 public keys.
 
 The vm-bhyve template attaches `seed.iso` as an `ahci-cd` device. The provisioner creates that ISO inside each guest directory before first boot.
+The repository template and provisioner both enforce vm-bhyve's native `bhyveload` loader for FreeBSD guests.
 
 ## Manual validation
 

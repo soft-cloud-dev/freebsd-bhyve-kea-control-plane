@@ -11,6 +11,8 @@ KEA_DB_INIT_SCRIPT="${KEA_DB_INIT_SCRIPT:-${ROOT}/scripts/init_kea_host_db.sh}"
 DEPENDENCY_SCRIPT="${DEPENDENCY_SCRIPT:-${ROOT}/scripts/02_install_dependencies.sh}"
 PROVISION_SCRIPT="${PROVISION_SCRIPT:-${ROOT}/scripts/provision_vm.sh}"
 ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT:-${ROOT}/scripts/rollback_vm.sh}"
+VM_TEMPLATE="${VM_TEMPLATE:-${ROOT}/templates/vm-bhyve.conf}"
+VM_LOADER_MIGRATION_SCRIPT="${VM_LOADER_MIGRATION_SCRIPT:-${ROOT}/scripts/migrate_vm_to_bhyveload.sh}"
 
 . "${ROOT}/scripts/lib.sh"
 
@@ -18,6 +20,8 @@ ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT:-${ROOT}/scripts/rollback_vm.sh}"
 [ -r "$DEPENDENCY_SCRIPT" ] || die "missing dependency installer"
 [ -r "$PROVISION_SCRIPT" ] || die "missing VM provisioner"
 [ -r "$ROLLBACK_SCRIPT" ] || die "missing VM rollback script"
+[ -r "$VM_TEMPLATE" ] || die "missing vm-bhyve template"
+[ -r "$VM_LOADER_MIGRATION_SCRIPT" ] || die "missing VM loader migration script"
 
 grep -Eq 'git clone --depth 1 https://git.FreeBSD.org/ports.git' "$DEPENDENCY_SCRIPT" || \
     die "dependency installer does not fetch a ports tree for the Kea fallback build"
@@ -59,13 +63,23 @@ grep -Eq "AND status = 'provisioning'" "$PROVISION_SCRIPT" || \
     die "VM finalization does not require provisioning state"
 grep -Eq "WHERE uuid = .*VM_UUID.*::uuid" "$ROLLBACK_SCRIPT" || \
     die "VM rollback is not scoped to the active inventory UUID"
+grep -Eq '^loader="bhyveload"$' "$VM_TEMPLATE" || \
+    die "FreeBSD vm-bhyve template does not use bhyveload"
+grep -Eq 'sysrc -f "\$VM_CONFIG" loader=bhyveload' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not enforce bhyveload independently of the installed template"
+loader_line=$(grep -n 'sysrc -f "\$VM_CONFIG" loader=bhyveload' "$PROVISION_SCRIPT" | sed -n '1s/:.*//p')
+start_line=$(grep -n 'vm start "\$VM_NAME"$' "$PROVISION_SCRIPT" | sed -n '1s/:.*//p')
+[ -n "$loader_line" ] && [ -n "$start_line" ] && [ "$loader_line" -lt "$start_line" ] || \
+    die "VM provisioner must enforce bhyveload before first start"
+grep -Eq 'cp -p "\$config_backup" "\$VM_CONFIG"' "$VM_LOADER_MIGRATION_SCRIPT" || \
+    die "VM loader migration does not restore its configuration backup on failure"
 
 preflight_dir=$(mktemp -d)
 trap 'rm -rf "$preflight_dir"' EXIT HUP INT TERM
 mock_bin="${preflight_dir}/bin"
 mkdir "$mock_bin"
 
-for mock_command in curl jq mktemp zfs; do
+for mock_command in curl jq mktemp sysrc zfs; do
     printf '#!/bin/sh\nexit 99\n' > "${mock_bin}/${mock_command}"
     chmod +x "${mock_bin}/${mock_command}"
 done

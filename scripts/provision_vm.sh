@@ -91,7 +91,7 @@ case "$CLOUD_INIT_USER" in
 esac
 
 require_root
-require_commands vm psql curl jq zfs mktemp
+require_commands vm psql curl jq zfs mktemp sysrc
 
 escaped_name=$(sql_literal "$VM_NAME")
 active_vm=$(psql -X -v ON_ERROR_STOP=1 -qAt -F '|' <<SQL
@@ -138,6 +138,7 @@ esac
 
 VM_ROOT=$(resolve_vm_root)
 VM_DIR="${VM_ROOT%/}/${VM_NAME}"
+VM_CONFIG="${VM_DIR}/${VM_NAME}.conf"
 
 created_vm=0
 inserted_vm=0
@@ -202,6 +203,14 @@ echo "[1/7] Creating VM"
 vm create -t "$TEMPLATE" "$VM_NAME"
 created_vm=1
 [ -d "$VM_DIR" ] || die "vm-bhyve guest directory not found: $VM_DIR"
+[ -f "$VM_CONFIG" ] || die "vm-bhyve guest configuration not found: $VM_CONFIG"
+created_loader=$(sysrc -f "$VM_CONFIG" -n loader 2>/dev/null || true)
+if [ "$created_loader" != "bhyveload" ]; then
+    echo " - enforcing bhyveload (template selected ${created_loader:-no loader})"
+    sysrc -f "$VM_CONFIG" loader=bhyveload >/dev/null
+fi
+[ "$(sysrc -f "$VM_CONFIG" -n loader)" = "bhyveload" ] || \
+    die "could not enforce bhyveload in $VM_CONFIG"
 
 echo "[2/7] Reading VM MAC address"
 MAC_ADDRESS=$(vm info "$VM_NAME" | awk '

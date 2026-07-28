@@ -34,7 +34,15 @@ reports stale inventory explicitly when PostgreSQL has an active row but vm-bhyv
 Finalization and compensating cleanup use the UUID of the newly inserted inventory row so archived rows
 that previously used the same VM name remain archived and are never modified by a new provisioning run.
 
-The guest image must include cloud-init with the NoCloud datasource enabled. The selected vm-bhyve template must attach `seed.iso` as a CD-ROM.
+The guest image must include cloud-init with the NoCloud datasource enabled. The selected vm-bhyve template must attach `seed.iso` as a CD-ROM. The provisioner enforces `bhyveload` in every newly created guest configuration before first boot, even if the installed vm-bhyve template is stale.
+
+To migrate an existing `uefi` or `uefi-csm` guest through a guarded stop/change/start cycle:
+
+```sh
+sudo sh scripts/migrate_vm_to_bhyveload.sh db-node-03
+```
+
+The migration restores the original configuration and restarts the previous loader if changing the loader or restarting the VM fails.
 
 ## Remove a VM
 
