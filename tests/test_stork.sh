@@ -24,8 +24,8 @@ do
     [ -r "$file" ] || die "missing or unreadable Stork file: $file"
 done
 
-grep -q '^STORK_REST_HOST=@MGMT_ADDR@$' "$SERVER_TEMPLATE" || \
-    die "Stork UI is not bound to the rendered management address"
+grep -q '^STORK_REST_HOST=0\.0\.0\.0$' "$SERVER_TEMPLATE" || \
+    die "Stork UI does not listen on both permitted interfaces"
 grep -q '^STORK_REST_PORT=8080$' "$SERVER_TEMPLATE" || \
     die "Stork UI port is not 8080"
 grep -q '^STORK_DATABASE_PASSWORD=@STORK_DB_PASSWORD@$' "$SERVER_TEMPLATE" || \

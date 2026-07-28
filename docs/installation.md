@@ -120,7 +120,7 @@ Expected exposure:
 ```text
 Unbound DNS         10.0.20.1:53 (TCP and UDP)
 Grafana             MGMT_ADDR:3000
-Stork dashboard     MGMT_ADDR:8080
+Stork dashboard     MGMT_ADDR:8080 and DNS_ADDR:8080
 Stork agent         127.0.0.1:8081
 Stork Kea exporter  127.0.0.1:9547
 Prometheus          127.0.0.1:9090
@@ -131,7 +131,7 @@ Kea Control Agent   127.0.0.1:8000
 
 ## Finish Stork enrollment
 
-Browse to `http://MGMT_ADDR:8080`. The first login is `admin` / `admin`; Stork immediately requires a password change. Then open **Services → Machines → Unauthorized**, compare the displayed agent token with `/var/lib/stork-agent/tokens/agent-token.txt`, and authorize the local Kea host.
+Browse to `http://MGMT_ADDR:8080` from the management network or `http://DNS_ADDR:8080` from the VM LAN. The first login is `admin` / `admin`; Stork immediately requires a password change. Then open **Services → Machines → Unauthorized**, compare the displayed agent token with `/var/lib/stork-agent/tokens/agent-token.txt`, and authorize the local Kea host.
 
 The Stork agent runs on the host rather than in a separate jail because it must inspect the Kea process and configuration. Its control listener and Prometheus exporter remain loopback-only. The UI is plain HTTP initially; terminate TLS at Stork or an authenticated management reverse proxy before using it across an untrusted network.
 

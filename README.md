@@ -26,10 +26,10 @@ node_exporter + postgres_exporter + Stork Kea exporter
               |
            Grafana
 
-Stork server (management TCP/8080) <---- Stork agent (loopback TCP/8081)
+Stork server (management + VM-LAN TCP/8080) <---- Stork agent (loopback TCP/8081)
 ```
 
-PostgreSQL is authoritative for inventory and IPAM. A separate PostgreSQL hosts database is Kea's writable reservation backend, allowing Stork and the provisioner to use the same Host Commands API. Unbound provides validating, recursive DNS to the VM LAN on `10.0.20.1` only. The FreeBSD host forwards and NATs VM traffic through the external interface while PF blocks the VM LAN from the management network and host services other than DHCP, DNS, and ICMP. Stork provides the Kea operations dashboard and uses its own PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana and Stork are exposed only on the management VLAN.
+PostgreSQL is authoritative for inventory and IPAM. A separate PostgreSQL hosts database is Kea's writable reservation backend, allowing Stork and the provisioner to use the same Host Commands API. Unbound provides validating, recursive DNS to the VM LAN on `10.0.20.1` only. The FreeBSD host forwards and NATs VM traffic through the external interface while PF blocks the VM LAN from the management network and host services other than DHCP, DNS, ICMP, and the Stork UI. Stork provides the Kea operations dashboard and uses its own PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana is management-only, while Stork is available from both trusted subnets.
 
 ## Repository layout
 
@@ -132,7 +132,7 @@ container list
 
 The complete sequence is documented in `docs/installation.md` and `docs/observability.md`.
 
-Stork is enabled by default. Its server and agent are built from the pinned official ISC `v2.5.0` source because ISC does not publish native FreeBSD packages. Set `STORK_ENABLE=no` to omit it. After startup, open `http://10.0.10.2:8080`, sign in with the initial `admin` / `admin` credentials, change the password immediately, and authorize the pending local agent under **Services → Machines → Unauthorized**.
+Stork is enabled by default. Its server and agent are built from the pinned official ISC `v2.5.0` source because ISC does not publish native FreeBSD packages. Set `STORK_ENABLE=no` to omit it. After startup, open `http://10.0.10.2:8080` from management or `http://10.0.20.1:8080` from the VM LAN, sign in with the initial `admin` / `admin` credentials, change the password immediately, and authorize the pending local agent under **Services → Machines → Unauthorized**.
 
 ## Provisioning
 

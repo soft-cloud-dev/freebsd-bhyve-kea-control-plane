@@ -67,7 +67,10 @@ sed -e "s|^ext_if[[:space:]]*=.*|ext_if = \"${EXT_IF}\"|" \
     -e "s|^lan_net[[:space:]]*=.*|lan_net = \"${LAN_NET}\"|" config/pf.conf > "$pf_tmp"
 
 if [ "$STORK_ENABLE" = no ]; then
-    sed 's/port { 3000 8080 }/port 3000/' "$pf_tmp" > "$pf_stork_tmp"
+    sed \
+        -e 's/port { 3000 8080 }/port 3000/' \
+        -e '/^pass in quick on \$lan_if proto tcp from \$lan_net to (\$lan_if) port 8080 keep state$/d' \
+        "$pf_tmp" > "$pf_stork_tmp"
     install -m 0600 "$pf_stork_tmp" "$pf_tmp"
 fi
 

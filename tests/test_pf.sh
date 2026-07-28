@@ -12,6 +12,19 @@ grep -Eq '^block in quick on \$lan_if inet from \$lan_net to \$mgmt_net$' "$CONF
     die "PF must isolate the VM LAN from the management network"
 grep -Eq '^pass in quick on \$lan_if inet from \$lan_net to any keep state$' "$CONF" || \
     die "PF must permit routed VM LAN traffic"
+grep -Eq '^pass in quick on \$lan_if proto tcp from \$lan_net to \(\$lan_if\) port 8080 keep state$' "$CONF" || \
+    die "PF must expose Stork to the VM LAN"
+awk '
+    /^pass in quick on \$lan_if proto tcp from \$lan_net to \(\$lan_if\) port 8080 keep state$/ {
+        stork_allow = NR
+    }
+    /^block in quick on \$lan_if inet from \$lan_net to self$/ {
+        host_block = NR
+    }
+    END {
+        exit !(stork_allow && host_block && stork_allow < host_block)
+    }
+' "$CONF" || die "PF must allow VM-LAN Stork access before blocking other host services"
 
 command -v pfctl >/dev/null 2>&1 || {
     echo "SKIP: pfctl is available only on FreeBSD; static routing checks passed" >&2
