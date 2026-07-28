@@ -36,6 +36,12 @@ pkg install -y \
     vm-bhyve \
     bhyve-firmware || true
 
+# BIND 9.20 is the current stable FreeBSD package. Retain the 9.18 ESV
+# fallback for supported quarterly package branches that do not yet ship 9.20.
+pkg install -y bind920 || \
+    pkg install -y bind918 || \
+    die "failed to install a supported BIND 9 package"
+
 # The FreeBSD sysutils/loki port is packaged as grafana-loki and includes
 # both the Loki and Promtail binaries and rc.d scripts.
 pkg install -y grafana-loki
@@ -75,5 +81,7 @@ sysrc vm_dir="zfs:zroot/vm" >/dev/null
 sysrc jail_enable=YES >/dev/null
 sysrc pf_enable=YES >/dev/null
 sysrc pflog_enable=YES >/dev/null
+sysrc named_enable=YES >/dev/null
+sysrc named_conf="/usr/local/etc/namedb/named.conf" >/dev/null
 
 echo "Dependencies installed. Control plane services are managed via FreeBSD Jails / container engine."

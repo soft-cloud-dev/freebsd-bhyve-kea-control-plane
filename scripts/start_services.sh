@@ -6,13 +6,18 @@ require_root
 
 PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT:-120}"
 LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT:-60}"
+DNS_READY_TIMEOUT="${DNS_READY_TIMEOUT:-15}"
 STORK_READY_TIMEOUT="${STORK_READY_TIMEOUT:-60}"
 STORK_ENABLE="${STORK_ENABLE:-yes}"
+DNS_ADDR="${DNS_ADDR:-10.0.20.1}"
 KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 
 case "$LOKI_READY_TIMEOUT" in
     ''|*[!0-9]*|0) die "LOKI_READY_TIMEOUT must be a positive integer" ;;
+esac
+case "$DNS_READY_TIMEOUT" in
+    ''|*[!0-9]*|0) die "DNS_READY_TIMEOUT must be a positive integer" ;;
 esac
 case "$STORK_READY_TIMEOUT" in
     ''|*[!0-9]*|0) die "STORK_READY_TIMEOUT must be a positive integer" ;;
@@ -23,6 +28,22 @@ case "$STORK_ENABLE" in
 esac
 
 PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh "$(dirname "$0")/apply_pf_safely.sh" apply
+
+[ -x /usr/local/etc/rc.d/named ] || \
+    die "BIND rc.d service is missing; run the dependency stage"
+service named restart 2>/dev/null || \
+    service named start || \
+    die "failed to start BIND; check /var/log/messages"
+
+i=0
+until sockstat -4 -l 2>/dev/null | \
+    awk -v endpoint="${DNS_ADDR}:53" '$6 == endpoint { found=1 } END { exit !found }'
+do
+    i=$((i+1))
+    [ "$i" -lt "$DNS_READY_TIMEOUT" ] || \
+        die "BIND did not listen on ${DNS_ADDR}:53 within ${DNS_READY_TIMEOUT} seconds"
+    sleep 1
+done
 
 if command -v jail >/dev/null 2>&1 && [ -f /etc/jail.conf ]; then
     echo "[*] Starting control plane FreeBSD service jails..."

@@ -1,0 +1,29 @@
+acl "vm_lan" {
+    @LAN_NET@;
+};
+
+options {
+    directory "/usr/local/etc/namedb/working";
+
+    listen-on port 53 {
+        @DNS_ADDR@;
+    };
+    listen-on-v6 {
+        none;
+    };
+
+    recursion yes;
+    allow-query {
+        vm_lan;
+    };
+    allow-query-cache {
+        vm_lan;
+    };
+    allow-recursion {
+        vm_lan;
+    };
+
+    dnssec-validation auto;
+    minimal-responses yes;
+    version none;
+};

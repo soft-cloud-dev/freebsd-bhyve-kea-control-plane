@@ -13,6 +13,9 @@ vm_dir="zfs:zroot/vm"
 postgresql_enable="YES"
 kea_dhcp4_enable="YES"
 
+named_enable="YES"
+named_conf="/usr/local/etc/namedb/named.conf"
+
 prometheus_enable="YES"
 prometheus_config="/usr/local/etc/prometheus.yml"
 prometheus_args="--web.listen-address=127.0.0.1:9090"

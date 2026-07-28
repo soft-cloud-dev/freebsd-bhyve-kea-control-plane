@@ -21,6 +21,7 @@ make install \
   MGMT_IF=vlan10 \
   LAN_IF=bridge0 \
   MGMT_ADDR=10.0.10.2 \
+  DNS_ADDR=10.0.20.1 \
   VM_DATASET=zroot/vm
 ```
 
@@ -65,7 +66,7 @@ validate-freebsd
 Each stage can also be invoked separately, for example:
 
 ```sh
-make configure-services EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0 MGMT_ADDR=10.0.10.2
+make configure-services EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0 MGMT_ADDR=10.0.10.2 DNS_ADDR=10.0.20.1
 make init-postgresql
 make init-stork
 make init-ipam IPAM_POOL=vm-lan IPAM_FIRST_HOST=10.0.20.10 IPAM_LAST_HOST=10.0.20.99
@@ -101,6 +102,7 @@ vm list
 Expected exposure:
 
 ```text
+BIND DNS           10.0.20.1:53 (TCP and UDP)
 Grafana             MGMT_ADDR:3000
 Stork dashboard     MGMT_ADDR:8080
 Stork agent         127.0.0.1:8081

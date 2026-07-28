@@ -1,6 +1,6 @@
 # FreeBSD bhyve + Kea Control Plane
 
-A FreeBSD-native control plane for trusted SSH access, ZFS-backed `vm-bhyve` guests, transactional PostgreSQL inventory/IPAM, Kea DHCP reservations, the Stork Kea dashboard, PF trust boundaries, Prometheus metrics, and Grafana dashboards.
+A FreeBSD-native control plane for trusted SSH access, ZFS-backed `vm-bhyve` guests, transactional PostgreSQL inventory/IPAM, Kea DHCP reservations, BIND 9 DNS, the Stork Kea dashboard, PF trust boundaries, Prometheus metrics, and Grafana dashboards.
 
 ## Architecture
 
@@ -29,7 +29,7 @@ node_exporter + postgres_exporter + Stork Kea exporter
 Stork server (management TCP/8080) <---- Stork agent (loopback TCP/8081)
 ```
 
-PostgreSQL is the authoritative inventory. Kea is the runtime DHCP service. The provisioner coordinates both and rolls back partial changes. Stork provides the Kea operations dashboard and uses a separate PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana and Stork are exposed only on the management VLAN.
+PostgreSQL is the authoritative inventory. Kea is the runtime DHCP service. BIND 9 provides recursive DNS to the VM LAN on `10.0.20.1` only. The provisioner coordinates PostgreSQL and Kea and rolls back partial changes. Stork provides the Kea operations dashboard and uses a separate PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana and Stork are exposed only on the management VLAN.
 
 ## Repository layout
 
@@ -39,6 +39,7 @@ config/
   grafana/provisioning/
   kea-ctrl-agent.conf
   kea-dhcp4.conf
+  named.conf.in
   pf.conf
   prometheus.yml
   rc.conf.example
@@ -93,6 +94,7 @@ sh scripts/configure_services.sh
 pfctl -nf /etc/pf.conf
 kea-dhcp4 -t /usr/local/etc/kea/kea-dhcp4.conf
 kea-ctrl-agent -t /usr/local/etc/kea/kea-ctrl-agent.conf
+named-checkconf /usr/local/etc/namedb/named.conf
 promtool check config /usr/local/etc/prometheus.yml
 ```
 
@@ -157,6 +159,7 @@ make test
 make validate-freebsd
 promtool check config /usr/local/etc/prometheus.yml
 sockstat -4 -6 -l
+service named status
 service prometheus status
 service grafana status
 ```
