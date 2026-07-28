@@ -114,9 +114,9 @@ if [ -n "$active_vm" ]; then
 $active_vm
 EOF
     if [ "$guest_exists" -eq 1 ]; then
-        die "VM '${VM_NAME}' already exists in active inventory and vm-bhyve (status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}); use the existing VM, deprovision it explicitly, or choose another name"
+        die "VM '${VM_NAME}' already exists in active inventory and vm-bhyve (status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}); use the existing VM, deprovision it explicitly with scripts/deprovision_vm.sh, or choose another name"
     fi
-    die "stale active inventory row for VM '${VM_NAME}': PostgreSQL reports status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}, but the vm-bhyve guest is absent; run PGDATABASE=${PGDATABASE} PGUSER=${PGUSER} sh scripts/rollback_vm.sh '${VM_NAME}' before retrying"
+    die "stale active inventory row for VM '${VM_NAME}': PostgreSQL reports status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}, but the vm-bhyve guest is absent; run PGDATABASE=${PGDATABASE} PGUSER=${PGUSER} sh scripts/deprovision_vm.sh '${VM_NAME}' before retrying"
 fi
 
 if [ "$guest_exists" -eq 1 ]; then

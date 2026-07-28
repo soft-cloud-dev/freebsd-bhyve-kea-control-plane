@@ -28,7 +28,7 @@ The operation succeeds only after:
 
 Earlier failures trigger compensating cleanup of temporary seed inputs, Kea, PostgreSQL, IPAM, and vm-bhyve state.
 An existing active name is never replaced automatically. Inspect it and, when removal is intended, run
-`scripts/rollback_vm.sh` before retrying provisioning. Rollback also completes when the Kea reservation
+`scripts/deprovision_vm.sh` before retrying provisioning. Deprovisioning also completes when the Kea reservation
 or vm-bhyve guest is already absent, which permits cleanup of a stale inventory row. The provisioner
 reports stale inventory explicitly when PostgreSQL has an active row but vm-bhyve has no matching guest.
 Finalization and compensating cleanup use the UUID of the newly inserted inventory row so archived rows
@@ -44,15 +44,21 @@ sudo sh scripts/migrate_vm_to_bhyveload.sh db-node-03
 
 The migration restores the original configuration and restarts the previous loader if changing the loader or restarting the VM fails.
 
-## Remove a VM
+## Deprovision a VM
 
 ```sh
 PGDATABASE=inventory \
 PGUSER=postgres \
-sh scripts/rollback_vm.sh db-node-01
+sh scripts/deprovision_vm.sh db-node-01
 ```
 
-The command removes the Kea reservation first, destroys the guest and its seed ISO, archives the inventory row, and releases the address.
+Or use the Make target:
+
+```sh
+sudo make deprovision-vm VM_NAME=db-node-01
+```
+
+The command removes the Kea reservation first, destroys the guest and its seed ISO, archives the inventory row, and releases the address. `rollback_vm.sh` remains the underlying transactional implementation.
 
 ## Inspect state
 

@@ -60,6 +60,7 @@ scripts/
   init_kea_host_db.sh
   init_stork.sh
   install_stork.sh
+  deprovision_vm.sh
   provision_vm.sh
   rollback_vm.sh
 templates/
@@ -152,7 +153,9 @@ sudo PGDATABASE=inventory \
 Deprovision:
 
 ```sh
-sudo PGDATABASE=inventory PGUSER=postgres sh scripts/rollback_vm.sh db-node-01
+sudo make deprovision-vm VM_NAME=db-node-01
+# or:
+sudo PGDATABASE=inventory PGUSER=postgres sh scripts/deprovision_vm.sh db-node-01
 ```
 
 ## Validation

@@ -45,17 +45,19 @@ STORK_DB_NAME ?= stork
 STORK_DB_USER ?= stork-server
 STORK_DB_PASSWORD_FILE ?= /usr/local/etc/stork/database-password
 STORK_READY_TIMEOUT ?= 60
+VM_NAME ?=
 
-SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/migrate_vm_to_bhyveload.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
+SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/deprovision_vm.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/migrate_vm_to_bhyveload.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
 TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh
 
 .NOTPARALLEL:
-.PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies install-stork-agent-packages configure-host configure-services init-postgresql init-kea-host-db init-stork init-ipam init-vm start-services validate-freebsd
+.PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies install-stork-agent-packages configure-host configure-services deprovision deprovision-vm init-postgresql init-kea-host-db init-stork init-ipam init-vm start-services validate-freebsd
 
 all help:
 	@echo "FreeBSD bhyve + Kea Control Plane"
 	@echo "Run: make install TRUSTED_SSH_READY=yes SSH_ADMIN_KEY_FILE=/root/id_ed25519.pub EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0"
 	@echo "SSH after hardening: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
+	@echo "Deprovision: make deprovision-vm VM_NAME=<name>"
 
 syntax:
 	@set -e; for file in ${SCRIPTS} ${TESTS}; do echo "sh -n $$file"; sh -n "$$file"; done
@@ -114,6 +116,12 @@ init-ipam:
 
 init-vm:
 	@VM_DIR="${VM_DIR}" VM_DATASET="${VM_DATASET}" LAN_IF="${LAN_IF}" sh scripts/init_vm.sh
+
+deprovision: deprovision-vm
+
+deprovision-vm:
+	@test -n "${VM_NAME}" || { echo "ERROR: set VM_NAME=<name>" >&2; exit 64; }
+	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" sh scripts/deprovision_vm.sh "${VM_NAME}"
 
 start-services:
 	@PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT}" DNS_READY_TIMEOUT="${DNS_READY_TIMEOUT}" STORK_READY_TIMEOUT="${STORK_READY_TIMEOUT}" STORK_ENABLE="${STORK_ENABLE}" MGMT_ADDR="${MGMT_ADDR}" DNS_ADDR="${DNS_ADDR}" KEA_API_USER_FILE="${KEA_API_USER_FILE}" KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE}" sh scripts/start_services.sh

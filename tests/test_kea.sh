@@ -11,6 +11,7 @@ KEA_DB_INIT_SCRIPT="${KEA_DB_INIT_SCRIPT:-${ROOT}/scripts/init_kea_host_db.sh}"
 DEPENDENCY_SCRIPT="${DEPENDENCY_SCRIPT:-${ROOT}/scripts/02_install_dependencies.sh}"
 PROVISION_SCRIPT="${PROVISION_SCRIPT:-${ROOT}/scripts/provision_vm.sh}"
 ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT:-${ROOT}/scripts/rollback_vm.sh}"
+DEPROVISION_SCRIPT="${DEPROVISION_SCRIPT:-${ROOT}/scripts/deprovision_vm.sh}"
 VM_TEMPLATE="${VM_TEMPLATE:-${ROOT}/templates/vm-bhyve.conf}"
 VM_LOADER_MIGRATION_SCRIPT="${VM_LOADER_MIGRATION_SCRIPT:-${ROOT}/scripts/migrate_vm_to_bhyveload.sh}"
 
@@ -20,6 +21,7 @@ VM_LOADER_MIGRATION_SCRIPT="${VM_LOADER_MIGRATION_SCRIPT:-${ROOT}/scripts/migrat
 [ -r "$DEPENDENCY_SCRIPT" ] || die "missing dependency installer"
 [ -r "$PROVISION_SCRIPT" ] || die "missing VM provisioner"
 [ -r "$ROLLBACK_SCRIPT" ] || die "missing VM rollback script"
+[ -r "$DEPROVISION_SCRIPT" ] || die "missing VM deprovision script"
 [ -r "$VM_TEMPLATE" ] || die "missing vm-bhyve template"
 [ -r "$VM_LOADER_MIGRATION_SCRIPT" ] || die "missing VM loader migration script"
 
@@ -63,6 +65,8 @@ grep -Eq "AND status = 'provisioning'" "$PROVISION_SCRIPT" || \
     die "VM finalization does not require provisioning state"
 grep -Eq "WHERE uuid = .*VM_UUID.*::uuid" "$ROLLBACK_SCRIPT" || \
     die "VM rollback is not scoped to the active inventory UUID"
+grep -Eq 'exec sh .*rollback_vm.sh.*"\$1"' "$DEPROVISION_SCRIPT" || \
+    die "VM deprovision command does not delegate to transactional rollback"
 grep -Eq '^loader="bhyveload"$' "$VM_TEMPLATE" || \
     die "FreeBSD vm-bhyve template does not use bhyveload"
 grep -Eq 'sysrc -f "\$VM_CONFIG" loader=bhyveload' "$PROVISION_SCRIPT" || \
