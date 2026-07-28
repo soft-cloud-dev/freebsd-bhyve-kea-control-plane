@@ -169,6 +169,7 @@ service grafana status
 - `vm-bhyve` and ZFS administration operations require `root` privileges.
 - The `vm info` parser is isolated but still depends on human-readable `vm-bhyve` output.
 - Kea DHCP reservations are updated dynamically in active server memory and written to disk via Control Agent API (`config-get`/`config-set`/`config-write`), avoiding dependency on external SQL host database hook plugins.
+- Stork subnet editing uses Kea's open-source `libdhcp_subnet_cmds.so` hook and therefore requires the FreeBSD Kea 3.0+ package.
 - `xattr=sa` is attempted and falls back to `xattr=on` when unsupported.
 - `volblocksize` is a zvol creation-time property and must be selected in each VM/template provisioning path.
 - Grafana is configured for management-network HTTP initially; production TLS and secure cookies require site-specific hostname and certificate decisions.

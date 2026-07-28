@@ -111,6 +111,10 @@ kea_existing=""
 if [ -r /usr/local/etc/kea/kea-dhcp4.conf ]; then
     kea_existing=/usr/local/etc/kea/kea-dhcp4.conf
 fi
+for kea_hook in libdhcp_host_cmds.so libdhcp_subnet_cmds.so; do
+    [ -r "/usr/local/lib/kea/hooks/${kea_hook}" ] || \
+        die "Kea hook ${kea_hook} is unavailable; install the FreeBSD Kea 3.0+ package"
+done
 sh scripts/render_kea_config.sh \
     config/kea-dhcp4.conf "$LAN_IF" "$kea_existing" > "$kea_tmp"
 if command -v kea-dhcp4 >/dev/null 2>&1; then

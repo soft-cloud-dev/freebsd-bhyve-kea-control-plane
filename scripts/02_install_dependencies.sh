@@ -24,7 +24,6 @@ pkg install -y \
     curl \
     grafana \
     jq \
-    kea \
     node_exporter \
     postgresql16-client \
     postgresql16-contrib \
@@ -35,6 +34,13 @@ pkg install -y \
     tmux \
     vm-bhyve \
     bhyve-firmware || true
+
+pkg install -y kea
+require_commands kea-dhcp4
+for kea_hook in libdhcp_host_cmds.so libdhcp_subnet_cmds.so; do
+    [ -r "/usr/local/lib/kea/hooks/${kea_hook}" ] || \
+        die "Kea hook ${kea_hook} is unavailable; install the FreeBSD Kea 3.0+ package"
+done
 
 # The ports Unbound service is intended for serving LAN clients. Stop and
 # remove a BIND installation left by an earlier control-plane release.

@@ -27,6 +27,8 @@ make install \
 
 The default installation builds Stork `v2.5.0` from ISC’s official source. This requires more build time and temporary disk space than the other package-based stages. To omit the Kea dashboard, add `STORK_ENABLE=no`.
 
+Stork subnet editing requires the open-source `libdhcp_subnet_cmds.so` hook shipped by the FreeBSD Kea 3.0+ package. The dependency and configuration stages stop with a clear error if an older package without this hook is installed. This file-backed deployment intentionally does not load the mutually exclusive `cb_cmds` hook.
+
 The installer does not attach the physical external interface directly to the VM switch. It creates a manual vm-bhyve switch backed by the existing `LAN_IF` bridge, preserving the intended network boundary.
 
 To enable PostgreSQL metrics, provide the exporter DSN explicitly:

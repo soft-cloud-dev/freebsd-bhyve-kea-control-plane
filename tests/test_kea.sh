@@ -13,6 +13,12 @@ KEA_RENDER_SCRIPT="${KEA_RENDER_SCRIPT:-${ROOT}/scripts/render_kea_config.sh}"
 if command -v jq >/dev/null 2>&1; then
     jq -e '(.Dhcp4["hosts-database"].type // "") != "memfile"' "$DHCP4_CONF" >/dev/null || \
         die "memfile is a lease backend and cannot be used as a Kea hosts database"
+    jq -e '
+        (.Dhcp4["hooks-libraries"] | map(.library)) as $hooks
+        | ($hooks | index("/usr/local/lib/kea/hooks/libdhcp_host_cmds.so")) != null
+        and ($hooks | index("/usr/local/lib/kea/hooks/libdhcp_subnet_cmds.so")) != null
+    ' "$DHCP4_CONF" >/dev/null || \
+        die "Kea must load both host_cmds and subnet_cmds for Stork management"
 
     test_dir=$(mktemp -d)
     trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
@@ -64,6 +70,13 @@ if (command -v sockstat >/dev/null 2>&1 && sockstat -4 -l 2>/dev/null | awk '$6 
             -d '{"command":"status-get"}' "$KEA_API_URL" 2>/dev/null || true)
         if [ -n "$response" ]; then
             printf '%s' "$response" | jq -e '.[0].result == 0' >/dev/null 2>&1 || true
+        fi
+        response=$(curl -fsS --user "$user:$password" \
+            -H 'Content-Type: application/json' \
+            -d '{"command":"subnet4-list"}' "$KEA_API_URL" 2>/dev/null || true)
+        if [ -n "$response" ]; then
+            printf '%s' "$response" | jq -e '.[0].result == 0' >/dev/null || \
+                die "Kea subnet_cmds hook is not responding"
         fi
     fi
 else

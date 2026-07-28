@@ -30,6 +30,7 @@ The workflow starts real instances of:
 - `kea-dhcp4`;
 - `kea-ctrl-agent`;
 - the `libdhcp_host_cmds.so` reservation hook.
+- the `libdhcp_subnet_cmds.so` subnet-management hook required by Stork.
 
 It then verifies the complete reservation lifecycle through the loopback Control Agent:
 
