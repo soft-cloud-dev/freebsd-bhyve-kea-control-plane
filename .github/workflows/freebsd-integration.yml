@@ -30,10 +30,12 @@ jobs:
           prepare: |
             set -eu
             pkg install -y bash curl jq kea gmake shellcheck
+            pkg install -y unbound
             install -d -m 0750 /var/run/kea /var/db/kea /usr/local/etc/kea
           run: |
             set -eu
             gmake lint
+            sh tests/test_unbound.sh
 
             printf '%s\n' ci-control-plane > /usr/local/etc/kea/kea-api-user
             printf '%s\n' ci-only-password > /usr/local/etc/kea/kea-api-password

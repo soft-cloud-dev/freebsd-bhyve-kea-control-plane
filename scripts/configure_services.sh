@@ -3,7 +3,7 @@ set -eu
 
 . "$(dirname "$0")/lib.sh"
 require_root
-require_commands jq named-checkconf
+require_commands jq unbound-anchor unbound-checkconf
 
 EXT_IF="${EXT_IF:-igb0}"
 MGMT_IF="${MGMT_IF:-vlan10}"
@@ -12,6 +12,9 @@ MGMT_NET="${MGMT_NET:-10.0.10.0/24}"
 LAN_NET="${LAN_NET:-10.0.20.0/24}"
 MGMT_ADDR="${MGMT_ADDR:-10.0.10.2}"
 DNS_ADDR="${DNS_ADDR:-10.0.20.1}"
+UNBOUND_CHROOT="${UNBOUND_CHROOT:-/usr/local/etc/unbound}"
+UNBOUND_USERNAME="${UNBOUND_USERNAME:-unbound}"
+UNBOUND_ROOT_KEY_FILE="${UNBOUND_ROOT_KEY_FILE:-/usr/local/etc/unbound/var/root.key}"
 KEA_API_USER="${KEA_API_USER:-stork-control-plane}"
 KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
@@ -41,12 +44,12 @@ esac
 pf_tmp=$(mktemp)
 pf_stork_tmp=$(mktemp)
 kea_tmp=$(mktemp)
-named_tmp=$(mktemp)
+unbound_tmp=$(mktemp)
 grafana_tmp=$(mktemp)
 prometheus_tmp=$(mktemp)
 stork_server_tmp=$(mktemp)
 stork_agent_tmp=$(mktemp)
-trap 'rm -f "$pf_tmp" "$pf_stork_tmp" "$kea_tmp" "$named_tmp" "$grafana_tmp" "$prometheus_tmp" "$stork_server_tmp" "$stork_agent_tmp"' EXIT HUP INT TERM
+trap 'rm -f "$pf_tmp" "$pf_stork_tmp" "$kea_tmp" "$unbound_tmp" "$grafana_tmp" "$prometheus_tmp" "$stork_server_tmp" "$stork_agent_tmp"' EXIT HUP INT TERM
 
 sed -e "s|^ext_if[[:space:]]*=.*|ext_if = \"${EXT_IF}\"|" \
     -e "s|^mgmt_if[[:space:]]*=.*|mgmt_if = \"${MGMT_IF}\"|" \
@@ -120,14 +123,26 @@ fi
 
 sed -e "s|@DNS_ADDR@|${DNS_ADDR}|g" \
     -e "s|@LAN_NET@|${LAN_NET}|g" \
-    config/named.conf.in > "$named_tmp"
-named-checkconf "$named_tmp"
-install -d -m 0755 /usr/local/etc/namedb
-install -d -m 0750 /usr/local/etc/namedb/working
-if id bind >/dev/null 2>&1; then
-    chown bind:bind /usr/local/etc/namedb/working
+    -e "s|@UNBOUND_CHROOT@|${UNBOUND_CHROOT}|g" \
+    -e "s|@UNBOUND_USERNAME@|${UNBOUND_USERNAME}|g" \
+    -e "s|@UNBOUND_ROOT_KEY_FILE@|${UNBOUND_ROOT_KEY_FILE}|g" \
+    config/unbound.conf.in > "$unbound_tmp"
+install -d -m 0755 /usr/local/etc/unbound
+install -d -m 0750 "$(dirname "$UNBOUND_ROOT_KEY_FILE")"
+if id unbound >/dev/null 2>&1; then
+    chown unbound:unbound "$(dirname "$UNBOUND_ROOT_KEY_FILE")"
 fi
-install -m 0644 "$named_tmp" /usr/local/etc/namedb/named.conf
+if [ ! -s "$UNBOUND_ROOT_KEY_FILE" ]; then
+    unbound-anchor -a "$UNBOUND_ROOT_KEY_FILE" >/dev/null 2>&1 || \
+        [ -s "$UNBOUND_ROOT_KEY_FILE" ] || \
+        die "failed to initialize the Unbound DNSSEC root trust anchor"
+fi
+if id unbound >/dev/null 2>&1; then
+    chown unbound:unbound "$UNBOUND_ROOT_KEY_FILE"
+fi
+chmod 0644 "$UNBOUND_ROOT_KEY_FILE"
+unbound-checkconf "$unbound_tmp"
+install -m 0644 "$unbound_tmp" /usr/local/etc/unbound/unbound.conf
 
 if [ "$STORK_ENABLE" = yes ]; then
     install -d -m 0750 /usr/local/etc/stork
@@ -227,7 +242,10 @@ for dashboard in config/grafana/provisioning/dashboards/json/*.json; do
 done
 
 sysrc pf_enable=YES pflog_enable=YES jail_enable=YES >/dev/null
-sysrc named_enable=YES named_conf=/usr/local/etc/namedb/named.conf >/dev/null
+sysrc -x named_enable >/dev/null 2>&1 || true
+sysrc -x named_conf >/dev/null 2>&1 || true
+sysrc local_unbound_enable=NO >/dev/null
+sysrc unbound_enable=YES unbound_conf=/usr/local/etc/unbound/unbound.conf >/dev/null
 if [ -x /usr/local/etc/rc.d/kea ]; then
     sysrc kea_enable=YES >/dev/null
 elif [ -x /usr/local/etc/rc.d/kea_dhcp4 ]; then

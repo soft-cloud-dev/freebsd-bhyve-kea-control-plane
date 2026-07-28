@@ -1,0 +1,24 @@
+server:
+    chroot: "@UNBOUND_CHROOT@"
+    username: "@UNBOUND_USERNAME@"
+    interface: @DNS_ADDR@
+    port: 53
+
+    do-ip4: yes
+    do-ip6: no
+    do-udp: yes
+    do-tcp: yes
+
+    access-control: 0.0.0.0/0 refuse
+    access-control: @LAN_NET@ allow
+
+    auto-trust-anchor-file: "@UNBOUND_ROOT_KEY_FILE@"
+    harden-dnssec-stripped: yes
+    qname-minimisation: yes
+    aggressive-nsec: yes
+
+    hide-identity: yes
+    hide-version: yes
+    minimal-responses: yes
+    prefetch: yes
+    use-syslog: yes

@@ -21,7 +21,7 @@ A future `TrustedUserCAKeys` deployment should issue short-lived SSH user certif
 
 ### Network exposure & Jail Isolation
 
-PF uses default deny. Control plane services are isolated with FreeBSD Jails where service discovery allows it. SSH, Grafana, and the Stork UI are management-only. DHCP and DNS are bridge-only. BIND listens only on `10.0.20.1` and limits both queries and recursion to `10.0.20.0/24`. Kea Control Agent, the Stork agent, Stork’s Kea exporter, and PostgreSQL remain loopback-bound.
+PF uses default deny. Control plane services are isolated with FreeBSD Jails where service discovery allows it. SSH, Grafana, and the Stork UI are management-only. DHCP and DNS are bridge-only. Unbound listens only on `10.0.20.1` and accepts queries only from `10.0.20.0/24`. Kea Control Agent, the Stork agent, Stork’s Kea exporter, and PostgreSQL remain loopback-bound.
 
 The Stork agent intentionally runs on the Kea host rather than in an isolated jail because it must inspect the Kea process and configuration. It runs as a dedicated unprivileged user with group-only read access to the Kea API credentials. Agent/server traffic is upgraded to mutual TLS during registration. Verify the pending agent token before authorization.
 

@@ -102,7 +102,7 @@ vm list
 Expected exposure:
 
 ```text
-BIND DNS           10.0.20.1:53 (TCP and UDP)
+Unbound DNS         10.0.20.1:53 (TCP and UDP)
 Grafana             MGMT_ADDR:3000
 Stork dashboard     MGMT_ADDR:8080
 Stork agent         127.0.0.1:8081

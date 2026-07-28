@@ -36,11 +36,23 @@ pkg install -y \
     vm-bhyve \
     bhyve-firmware || true
 
-# BIND 9.20 is the current stable FreeBSD package. Retain the 9.18 ESV
-# fallback for supported quarterly package branches that do not yet ship 9.20.
-pkg install -y bind920 || \
-    pkg install -y bind918 || \
-    die "failed to install a supported BIND 9 package"
+# The ports Unbound service is intended for serving LAN clients. Stop and
+# remove a BIND installation left by an earlier control-plane release.
+if [ -x /usr/local/etc/rc.d/named ]; then
+    if service named onestatus >/dev/null 2>&1; then
+        service named stop
+    fi
+fi
+sysrc -x named_enable >/dev/null 2>&1 || true
+sysrc -x named_conf >/dev/null 2>&1 || true
+for bind_pkg in bind920 bind918; do
+    if pkg info -e "$bind_pkg" >/dev/null 2>&1; then
+        pkg delete -y "$bind_pkg"
+    fi
+done
+
+pkg install -y unbound
+require_commands unbound unbound-anchor unbound-checkconf
 
 # The FreeBSD sysutils/loki port is packaged as grafana-loki and includes
 # both the Loki and Promtail binaries and rc.d scripts.
@@ -81,7 +93,8 @@ sysrc vm_dir="zfs:zroot/vm" >/dev/null
 sysrc jail_enable=YES >/dev/null
 sysrc pf_enable=YES >/dev/null
 sysrc pflog_enable=YES >/dev/null
-sysrc named_enable=YES >/dev/null
-sysrc named_conf="/usr/local/etc/namedb/named.conf" >/dev/null
+sysrc local_unbound_enable=NO >/dev/null
+sysrc unbound_enable=YES >/dev/null
+sysrc unbound_conf="/usr/local/etc/unbound/unbound.conf" >/dev/null
 
 echo "Dependencies installed. Control plane services are managed via FreeBSD Jails / container engine."

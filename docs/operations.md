@@ -50,6 +50,8 @@ sudo -u postgres psql -d inventory -c 'TABLE ipam_leases;'
 pfctl -sr
 pfctl -a 'blacklistd/*' -sr
 sockstat -4 -6 -l
+service unbound status
+drill @10.0.20.1 freebsd.org
 ```
 
 ## Service management
@@ -66,6 +68,7 @@ jexec postgres psql -U postgres -d inventory
 jexec kea kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
 service stork_server status
 service stork_agent status
+service unbound status
 ```
 
 The Stork dashboard is at `http://MGMT_ADDR:8080`. Its database is separate from `inventory`. Back it up with:
@@ -95,6 +98,7 @@ Back up:
 
 - `/etc/rc.conf`, `/etc/pf.conf`, `/etc/jail.conf`, `/etc/ssh`, and `/etc/blacklistd.conf`
 - `/usr/local/etc/kea`
+- `/usr/local/etc/unbound`
 - `/usr/local/etc/stork`, `/var/lib/stork-agent`, and the Stork PostgreSQL database
 - PostgreSQL inventory using `pg_dump`
 - vm-bhyve templates and guest definitions

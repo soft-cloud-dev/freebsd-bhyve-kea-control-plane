@@ -29,11 +29,21 @@ esac
 
 PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh "$(dirname "$0")/apply_pf_safely.sh" apply
 
-[ -x /usr/local/etc/rc.d/named ] || \
-    die "BIND rc.d service is missing; run the dependency stage"
-service named restart 2>/dev/null || \
-    service named start || \
-    die "failed to start BIND; check /var/log/messages"
+if [ -x /usr/local/etc/rc.d/named ]; then
+    if service named onestatus >/dev/null 2>&1; then
+        service named stop
+    fi
+fi
+if [ -x /etc/rc.d/local_unbound ]; then
+    if service local_unbound onestatus >/dev/null 2>&1; then
+        service local_unbound stop
+    fi
+fi
+[ -x /usr/local/etc/rc.d/unbound ] || \
+    die "Unbound rc.d service is missing; run the dependency stage"
+service unbound restart 2>/dev/null || \
+    service unbound start || \
+    die "failed to start Unbound; check /var/log/messages"
 
 i=0
 until sockstat -4 -l 2>/dev/null | \
@@ -41,7 +51,7 @@ until sockstat -4 -l 2>/dev/null | \
 do
     i=$((i+1))
     [ "$i" -lt "$DNS_READY_TIMEOUT" ] || \
-        die "BIND did not listen on ${DNS_ADDR}:53 within ${DNS_READY_TIMEOUT} seconds"
+        die "Unbound did not listen on ${DNS_ADDR}:53 within ${DNS_READY_TIMEOUT} seconds"
     sleep 1
 done
 

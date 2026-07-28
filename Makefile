@@ -40,7 +40,7 @@ STORK_DB_PASSWORD_FILE ?= /usr/local/etc/stork/database-password
 STORK_READY_TIMEOUT ?= 60
 
 SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/lib.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
-TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_bind.sh tests/test_observability.sh tests/test_stork.sh
+TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh
 
 .NOTPARALLEL:
 .PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies configure-host configure-services init-postgresql init-stork init-ipam init-vm start-services validate-freebsd
@@ -58,7 +58,7 @@ lint: syntax
 
 test: lint
 	@sh tests/test_kea.sh
-	@sh tests/test_bind.sh
+	@sh tests/test_unbound.sh
 	@sh tests/test_observability.sh
 	@sh tests/test_stork.sh
 
@@ -107,7 +107,7 @@ start-services:
 validate-freebsd: lint
 	@sh tests/test_pf.sh
 	@sh tests/test_kea.sh
-	@sh tests/test_bind.sh
+	@sh tests/test_unbound.sh
 	@sh tests/test_observability.sh
 	@sh tests/test_stork.sh
 	@sockstat -4 -6 -l

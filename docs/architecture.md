@@ -7,7 +7,7 @@
 | OpenSSH / future FreeIPA SSH CA | Administrative identity and host trust |
 | PostgreSQL (Container) | VM inventory/IP allocation state and the separate Stork application database |
 | Kea DHCP4 (Container) | Runtime delivery of network configuration |
-| BIND 9 | Restricted recursive DNS for the VM LAN |
+| Unbound | Restricted validating, recursive DNS for the VM LAN |
 | vm-bhyve | Guest lifecycle |
 | ZFS | Guest storage |
 | PF and blacklistd | Network boundary enforcement and abuse suppression |
@@ -44,7 +44,7 @@ Each completed external action has a compensating rollback action. The shell scr
 - PostgreSQL is expected to use a local Unix socket for the provisioner.
 - SSH is accepted only on the management interface and from the management subnet.
 - DHCP and internal DNS are accepted only on the VM bridge.
-- BIND listens only on `10.0.20.1` and permits queries and recursion only from `10.0.20.0/24`.
+- Unbound listens only on `10.0.20.1` and accepts queries only from `10.0.20.0/24`.
 - Observability endpoints are exposed only on the management interface.
 - The Stork server UI binds to the management address. The local Stork agent and its Kea exporter bind only to loopback.
 - PF starts from a default-deny policy.

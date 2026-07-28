@@ -13,8 +13,9 @@ vm_dir="zfs:zroot/vm"
 postgresql_enable="YES"
 kea_dhcp4_enable="YES"
 
-named_enable="YES"
-named_conf="/usr/local/etc/namedb/named.conf"
+local_unbound_enable="NO"
+unbound_enable="YES"
+unbound_conf="/usr/local/etc/unbound/unbound.conf"
 
 prometheus_enable="YES"
 prometheus_config="/usr/local/etc/prometheus.yml"
