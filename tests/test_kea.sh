@@ -73,7 +73,8 @@ printf '%s\n' 'running|10.0.20.10|58:9c:fc:0b:cb:64|zroot/vm/db-node-01'
 EOF
 cat > "${mock_bin}/vm" <<'EOF'
 #!/bin/sh
-: > "$VM_CALL_LOG"
+[ "$#" -gt 0 ] && printf '%s\n' "$*" >> "$VM_CALL_LOG"
+[ "${1:-}" = "info" ] && exit 1
 exit 99
 EOF
 chmod +x "${mock_bin}/id" "${mock_bin}/psql" "${mock_bin}/vm"
@@ -84,10 +85,12 @@ if PATH="${mock_bin}:${PATH}" \
     >"${preflight_dir}/output" 2>&1; then
     die "VM provisioner accepted an active inventory name"
 fi
-grep -q "already exists in active inventory" "${preflight_dir}/output" || \
-    die "VM provisioner did not explain the active inventory conflict"
-[ ! -e "${preflight_dir}/vm-called" ] || \
-    die "VM provisioner contacted vm-bhyve before rejecting the active inventory name"
+grep -q "stale active inventory row" "${preflight_dir}/output" || \
+    die "VM provisioner did not identify an inventory row without a vm-bhyve guest"
+if [ -e "${preflight_dir}/vm-called" ]; then
+    ! grep -q '^create ' "${preflight_dir}/vm-called" || \
+        die "VM provisioner created a guest before rejecting the active inventory name"
+fi
 
 rm -rf "$preflight_dir"
 trap - EXIT HUP INT TERM

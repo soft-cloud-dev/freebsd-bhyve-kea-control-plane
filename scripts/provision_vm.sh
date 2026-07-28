@@ -103,14 +103,23 @@ SELECT status, ip_address, mac_address, dataset
  LIMIT 1;
 SQL
 )
+
+guest_exists=0
+if vm info "$VM_NAME" >/dev/null 2>&1; then
+    guest_exists=1
+fi
+
 if [ -n "$active_vm" ]; then
     IFS='|' read -r active_status active_ip active_mac active_dataset <<EOF
 $active_vm
 EOF
-    die "VM '${VM_NAME}' already exists in active inventory (status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}); inspect it first, then deprovision it with scripts/rollback_vm.sh or choose another name"
+    if [ "$guest_exists" -eq 1 ]; then
+        die "VM '${VM_NAME}' already exists in active inventory and vm-bhyve (status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}); use the existing VM, deprovision it explicitly, or choose another name"
+    fi
+    die "stale active inventory row for VM '${VM_NAME}': PostgreSQL reports status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}, but the vm-bhyve guest is absent; run PGDATABASE=${PGDATABASE} PGUSER=${PGUSER} sh scripts/rollback_vm.sh '${VM_NAME}' before retrying"
 fi
 
-if vm info "$VM_NAME" >/dev/null 2>&1; then
+if [ "$guest_exists" -eq 1 ]; then
     die "vm-bhyve guest '${VM_NAME}' already exists without an active inventory row; reconcile or explicitly destroy that guest before provisioning"
 fi
 

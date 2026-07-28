@@ -29,7 +29,8 @@ The operation succeeds only after:
 Earlier failures trigger compensating cleanup of temporary seed inputs, Kea, PostgreSQL, IPAM, and vm-bhyve state.
 An existing active name is never replaced automatically. Inspect it and, when removal is intended, run
 `scripts/rollback_vm.sh` before retrying provisioning. Rollback also completes when the Kea reservation
-or vm-bhyve guest is already absent, which permits cleanup of a stale inventory row.
+or vm-bhyve guest is already absent, which permits cleanup of a stale inventory row. The provisioner
+reports stale inventory explicitly when PostgreSQL has an active row but vm-bhyve has no matching guest.
 
 The guest image must include cloud-init with the NoCloud datasource enabled. The selected vm-bhyve template must attach `seed.iso` as a CD-ROM.
 
