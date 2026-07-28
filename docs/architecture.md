@@ -5,7 +5,7 @@
 | Component | Authority |
 |---|---|
 | OpenSSH / future FreeIPA SSH CA | Administrative identity and host trust |
-| PostgreSQL (Container) | VM inventory/IP allocation state and the separate Stork application database |
+| PostgreSQL (Container) | VM inventory/IP allocation state, Kea host reservations, and the separate Stork application database |
 | Kea DHCP4 (Container) | Runtime delivery of network configuration |
 | Unbound | Restricted validating, recursive DNS for the VM LAN |
 | vm-bhyve | Guest lifecycle |
@@ -14,7 +14,7 @@
 | Container CLI (`container`) | Lifecycle engine for control plane service containers |
 | Stork server + host agent | Kea operations, dashboard, and metrics plane |
 
-PostgreSQL is authoritative for intended VM and IPAM state. Kea reservations are derived runtime state. A reservation must therefore be removed or repaired when provisioning does not complete.
+PostgreSQL inventory is authoritative for intended VM and IPAM state. Kea uses a separate PostgreSQL hosts database for operational reservations so Stork and the provisioner share one writable backend. A reservation must therefore be removed or repaired when provisioning does not complete.
 
 ## Provisioning sequence
 

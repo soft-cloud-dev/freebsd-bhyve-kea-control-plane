@@ -123,6 +123,7 @@ jobs:
             reservation_payload=$(jq -n '{
               command:"reservation-add",
               arguments:{
+                "operation-target":"memory",
                 reservation:{
                   "subnet-id":1,
                   "hw-address":"02:00:00:00:00:10",
@@ -139,6 +140,7 @@ jobs:
             get_payload=$(jq -n '{
               command:"reservation-get",
               arguments:{
+                "operation-target":"memory",
                 "subnet-id":1,
                 "identifier-type":"hw-address",
                 identifier:"02:00:00:00:00:10"
@@ -153,6 +155,7 @@ jobs:
             delete_payload=$(jq -n '{
               command:"reservation-del",
               arguments:{
+                "operation-target":"memory",
                 "subnet-id":1,
                 "identifier-type":"hw-address",
                 identifier:"02:00:00:00:00:10"

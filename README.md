@@ -13,7 +13,7 @@ SSH trust / FreeIPA CA
   |                |                |
 ZFS + vm-bhyve  PostgreSQL       Kea DHCP4
   |          inventory/IPAM +       |
-  |            Stork DB             +-- Stork agent
+  |       Kea hosts + Stork DB      +-- Stork agent
   +----------------+----------------+
                    |
                 bridge0
@@ -29,7 +29,7 @@ node_exporter + postgres_exporter + Stork Kea exporter
 Stork server (management TCP/8080) <---- Stork agent (loopback TCP/8081)
 ```
 
-PostgreSQL is the authoritative inventory. Kea is the runtime DHCP service. Unbound provides validating, recursive DNS to the VM LAN on `10.0.20.1` only. The FreeBSD host forwards and NATs VM traffic through the external interface while PF blocks the VM LAN from the management network and host services other than DHCP, DNS, and ICMP. The provisioner coordinates PostgreSQL and Kea and rolls back partial changes. Stork provides the Kea operations dashboard and uses a separate PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana and Stork are exposed only on the management VLAN.
+PostgreSQL is authoritative for inventory and IPAM. A separate PostgreSQL hosts database is Kea's writable reservation backend, allowing Stork and the provisioner to use the same Host Commands API. Unbound provides validating, recursive DNS to the VM LAN on `10.0.20.1` only. The FreeBSD host forwards and NATs VM traffic through the external interface while PF blocks the VM LAN from the management network and host services other than DHCP, DNS, and ICMP. Stork provides the Kea operations dashboard and uses its own PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana and Stork are exposed only on the management VLAN.
 
 ## Repository layout
 
@@ -57,6 +57,7 @@ docs/
 scripts/
   01_host_setup.sh
   02_install_dependencies.sh
+  init_kea_host_db.sh
   init_stork.sh
   install_stork.sh
   provision_vm.sh
@@ -90,6 +91,8 @@ Review all interface names, networks, package versions, service paths, database 
 su -
 sh scripts/02_install_dependencies.sh
 sh scripts/01_host_setup.sh
+sh scripts/init_postgresql.sh
+sh scripts/init_kea_host_db.sh
 sh scripts/configure_services.sh
 pfctl -nf /etc/pf.conf
 kea-dhcp4 -t /usr/local/etc/kea/kea-dhcp4.conf
@@ -98,10 +101,11 @@ unbound-checkconf /usr/local/etc/unbound/unbound.conf
 promtool check config /usr/local/etc/prometheus.yml
 ```
 
-Initialize PostgreSQL and inventory:
+Initialize PostgreSQL inventory, the Kea hosts backend, and Stork:
 
 ```sh
 sh scripts/init_postgresql.sh
+sh scripts/init_kea_host_db.sh
 sh scripts/init_stork.sh
 sudo -u postgres psql -d inventory <<'SQL'
 INSERT INTO ipam_pools(name, subnet, first_host, last_host, vlan, kea_subnet_id)
@@ -168,7 +172,8 @@ service grafana status
 
 - `vm-bhyve` and ZFS administration operations require `root` privileges.
 - The `vm info` parser is isolated but still depends on human-readable `vm-bhyve` output.
-- Kea DHCP reservations are updated dynamically in active server memory and written to disk via Control Agent API (`config-get`/`config-set`/`config-write`), avoiding dependency on external SQL host database hook plugins.
+- Kea and Stork update reservations through `reservation-add`/`reservation-del` against a dedicated PostgreSQL hosts database.
+- The standard FreeBSD Kea package does not enable PostgreSQL support; `net/kea` must be built with its `PGSQL` option.
 - Stork subnet editing uses Kea's open-source `libdhcp_subnet_cmds.so` hook and therefore requires the FreeBSD Kea 3.0+ package.
 - `xattr=sa` is attempted and falls back to `xattr=on` when unsupported.
 - `volblocksize` is a zvol creation-time property and must be selected in each VM/template provisioning path.

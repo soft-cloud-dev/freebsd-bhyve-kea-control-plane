@@ -26,6 +26,9 @@ KEA_SUBNET_ID ?= 1
 KEA_API_USER ?= stork-control-plane
 KEA_API_USER_FILE ?= /usr/local/etc/kea/kea-api-user
 KEA_API_PASSWORD_FILE ?= /usr/local/etc/kea/kea-api-password
+KEA_HOST_DB_NAME ?= kea_hosts
+KEA_HOST_DB_USER ?= kea_hosts
+KEA_HOST_DB_PASSWORD_FILE ?= /usr/local/etc/kea/kea-host-db-password
 POSTGRES_EXPORTER_DSN ?=
 PF_ROLLBACK_TIMEOUT ?= 120
 LOKI_READY_TIMEOUT ?= 60
@@ -39,11 +42,11 @@ STORK_DB_USER ?= stork-server
 STORK_DB_PASSWORD_FILE ?= /usr/local/etc/stork/database-password
 STORK_READY_TIMEOUT ?= 60
 
-SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/lib.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
+SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/lib.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
 TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh
 
 .NOTPARALLEL:
-.PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies configure-host configure-services init-postgresql init-stork init-ipam init-vm start-services validate-freebsd
+.PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies configure-host configure-services init-postgresql init-kea-host-db init-stork init-ipam init-vm start-services validate-freebsd
 
 all help:
 	@echo "FreeBSD bhyve + Kea Control Plane"
@@ -76,7 +79,7 @@ check-trust:
 	@test "${TRUSTED_SSH_READY}" = yes || { echo "ERROR: confirm trusted SSH with TRUSTED_SSH_READY=yes" >&2; exit 1; }
 	@test -n "${SSH_ADMIN_KEY_FILE}${SSH_ADMIN_AUTHORIZED_KEY}" || { echo "ERROR: set SSH_ADMIN_KEY_FILE or SSH_ADMIN_AUTHORIZED_KEY" >&2; exit 1; }
 
-install: check-root check-platform check-trust syntax install-dependencies configure-host configure-services init-postgresql init-stork init-ipam init-vm start-services validate-freebsd
+install: check-root check-platform check-trust syntax install-dependencies configure-host init-postgresql init-kea-host-db configure-services init-stork init-ipam init-vm start-services validate-freebsd
 	@PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" sh scripts/apply_pf_safely.sh confirm
 	@echo "[+] Installation completed"
 	@echo "[+] SSH login: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
@@ -88,10 +91,13 @@ configure-host:
 	@EXT_IF="${EXT_IF}" MGMT_IF="${MGMT_IF}" LAN_IF="${LAN_IF}" MGMT_ADDR="${MGMT_ADDR}" VM_DATASET="${VM_DATASET}" MGMT_GROUP="${MGMT_GROUP}" MGMT_USER="${MGMT_USER}" SSH_ADMIN_KEY_FILE="${SSH_ADMIN_KEY_FILE}" SSH_ADMIN_AUTHORIZED_KEY="${SSH_ADMIN_AUTHORIZED_KEY}" sh scripts/01_host_setup.sh
 
 configure-services:
-	@EXT_IF="${EXT_IF}" MGMT_IF="${MGMT_IF}" LAN_IF="${LAN_IF}" MGMT_NET="${MGMT_NET}" LAN_NET="${LAN_NET}" MGMT_ADDR="${MGMT_ADDR}" DNS_ADDR="${DNS_ADDR}" KEA_API_USER="${KEA_API_USER}" KEA_API_USER_FILE="${KEA_API_USER_FILE}" KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE}" POSTGRES_EXPORTER_DSN="${POSTGRES_EXPORTER_DSN}" STORK_ENABLE="${STORK_ENABLE}" STORK_DB_NAME="${STORK_DB_NAME}" STORK_DB_USER="${STORK_DB_USER}" STORK_DB_PASSWORD_FILE="${STORK_DB_PASSWORD_FILE}" sh scripts/configure_services.sh
+	@EXT_IF="${EXT_IF}" MGMT_IF="${MGMT_IF}" LAN_IF="${LAN_IF}" MGMT_NET="${MGMT_NET}" LAN_NET="${LAN_NET}" MGMT_ADDR="${MGMT_ADDR}" DNS_ADDR="${DNS_ADDR}" KEA_API_USER="${KEA_API_USER}" KEA_API_USER_FILE="${KEA_API_USER_FILE}" KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE}" KEA_HOST_DB_NAME="${KEA_HOST_DB_NAME}" KEA_HOST_DB_USER="${KEA_HOST_DB_USER}" KEA_HOST_DB_PASSWORD_FILE="${KEA_HOST_DB_PASSWORD_FILE}" POSTGRES_EXPORTER_DSN="${POSTGRES_EXPORTER_DSN}" STORK_ENABLE="${STORK_ENABLE}" STORK_DB_NAME="${STORK_DB_NAME}" STORK_DB_USER="${STORK_DB_USER}" STORK_DB_PASSWORD_FILE="${STORK_DB_PASSWORD_FILE}" sh scripts/configure_services.sh
 
 init-postgresql:
 	@PG_USER="${PG_USER}" PG_DATABASE="${PG_DATABASE}" PG_DATA="${PG_DATA}" sh scripts/init_postgresql.sh
+
+init-kea-host-db:
+	@KEA_HOST_DB_NAME="${KEA_HOST_DB_NAME}" KEA_HOST_DB_USER="${KEA_HOST_DB_USER}" KEA_HOST_DB_PASSWORD_FILE="${KEA_HOST_DB_PASSWORD_FILE}" PG_USER="${PG_USER}" sh scripts/init_kea_host_db.sh
 
 init-stork:
 	@STORK_ENABLE="${STORK_ENABLE}" STORK_DB_NAME="${STORK_DB_NAME}" STORK_DB_USER="${STORK_DB_USER}" STORK_DB_PASSWORD_FILE="${STORK_DB_PASSWORD_FILE}" PG_USER="${PG_USER}" sh scripts/init_stork.sh

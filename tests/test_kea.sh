@@ -7,11 +7,28 @@ KEA_API_URL="${KEA_API_URL:-http://127.0.0.1:8000/}"
 KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 KEA_RENDER_SCRIPT="${KEA_RENDER_SCRIPT:-${ROOT}/scripts/render_kea_config.sh}"
+KEA_DB_INIT_SCRIPT="${KEA_DB_INIT_SCRIPT:-${ROOT}/scripts/init_kea_host_db.sh}"
+PROVISION_SCRIPT="${PROVISION_SCRIPT:-${ROOT}/scripts/provision_vm.sh}"
+ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT:-${ROOT}/scripts/rollback_vm.sh}"
 
 . "${ROOT}/scripts/lib.sh"
 
+[ -r "$KEA_DB_INIT_SCRIPT" ] || die "missing Kea hosts database initializer"
+[ -r "$PROVISION_SCRIPT" ] || die "missing VM provisioner"
+[ -r "$ROLLBACK_SCRIPT" ] || die "missing VM rollback script"
+
+grep -Eq 'kea-admin db-init pgsql' "$KEA_DB_INIT_SCRIPT" || \
+    die "Kea hosts database initializer does not create a PostgreSQL schema"
+grep -Eq 'command:"reservation-add"' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not use Kea reservation-add"
+grep -Eq 'command:"reservation-del"' "$ROLLBACK_SCRIPT" || \
+    die "VM rollback does not use Kea reservation-del"
+
 if command -v jq >/dev/null 2>&1; then
-    jq -e '(.Dhcp4["hosts-database"].type // "") != "memfile"' "$DHCP4_CONF" >/dev/null || \
+    jq -e '
+        (.Dhcp4["hosts-database"].type // "") != "memfile"
+        and all((.Dhcp4["hosts-databases"] // [])[]; .type != "memfile")
+    ' "$DHCP4_CONF" >/dev/null || \
         die "memfile is a lease backend and cannot be used as a Kea hosts database"
     jq -e '
         (.Dhcp4["hooks-libraries"] | map(.library)) as $hooks
@@ -24,6 +41,8 @@ if command -v jq >/dev/null 2>&1; then
     trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
     existing_conf="${test_dir}/existing.json"
     rendered_conf="${test_dir}/rendered.json"
+    password_file="${test_dir}/kea-host-db-password"
+    printf '%s\n' test-only-password > "$password_file"
 
     jq '.Dhcp4.subnet4[0].reservations = [{
         "hw-address": "58:9c:fc:0b:cb:64",
@@ -32,9 +51,24 @@ if command -v jq >/dev/null 2>&1; then
     }]' "$DHCP4_CONF" > "$existing_conf"
 
     sh "$KEA_RENDER_SCRIPT" \
-        "$DHCP4_CONF" bridge-test "$existing_conf" > "$rendered_conf"
+        "$DHCP4_CONF" \
+        bridge-test \
+        "$existing_conf" \
+        kea_hosts \
+        kea_hosts \
+        "$password_file" \
+        127.0.0.1 > "$rendered_conf"
     jq -e '
         .Dhcp4["interfaces-config"].interfaces == ["bridge-test"]
+        and .Dhcp4["hosts-databases"] == [{
+            "type": "postgresql",
+            "name": "kea_hosts",
+            "user": "kea_hosts",
+            "password": "test-only-password",
+            "host": "127.0.0.1",
+            "port": 5432
+        }]
+        and (.Dhcp4["hooks-libraries"] | map(.library) | index("/usr/local/lib/kea/hooks/libdhcp_pgsql.so")) != null
         and .Dhcp4.subnet4[0].reservations == [{
             "hw-address": "58:9c:fc:0b:cb:64",
             "ip-address": "10.0.20.10",

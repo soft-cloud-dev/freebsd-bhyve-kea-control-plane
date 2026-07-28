@@ -44,22 +44,23 @@ IFS='|' read -r MAC_ADDRESS IP_ADDRESS POOL_ID KEA_SUBNET_ID <<EOF
 $row
 EOF
 
-cfg_response=$(kea_request '{"command":"config-get"}')
-cfg_result=$(printf '%s' "$cfg_response" | jq -er '.[0].result')
-if [ "$cfg_result" -eq 0 ]; then
-    new_cfg=$(printf '%s' "$cfg_response" | jq --arg mac "$MAC_ADDRESS" \
-        '.[0].arguments.Dhcp4.subnet4 |= map(.reservations |= ((. // []) | map(select(type == "object" and (."hw-address" // "") != $mac))))')
-    set_payload=$(printf '%s' "$new_cfg" | jq '{command:"config-set",arguments:(.[0].arguments | del(.hash))}')
-    set_response=$(kea_request "$(printf '%s' "$set_payload")")
-    set_result=$(printf '%s' "$set_response" | jq -er '.[0].result')
-    [ "$set_result" -eq 0 ] || {
-        echo "ERROR: Kea config-set failed during rollback: $set_response" >&2
-        exit 1
-    }
-    kea_request '{"command":"config-write"}' >/dev/null 2>&1 || true
-else
-    echo "WARNING: Kea config-get failed, reservation may remain: $cfg_response" >&2
-fi
+delete_payload=$(jq -n \
+    --arg mac "$MAC_ADDRESS" \
+    --argjson subnet_id "$KEA_SUBNET_ID" \
+    '{
+        command:"reservation-del",
+        arguments:{
+            "subnet-id":$subnet_id,
+            "identifier-type":"hw-address",
+            identifier:$mac
+        }
+    }')
+delete_response=$(kea_request "$delete_payload")
+delete_result=$(printf '%s' "$delete_response" | jq -er '.[0].result')
+[ "$delete_result" -eq 0 ] || {
+    echo "ERROR: Kea reservation-del failed during rollback: $delete_response" >&2
+    exit 1
+}
 
 vm stop "$VM_NAME" >/dev/null 2>&1 || true
 vm destroy -f "$VM_NAME"

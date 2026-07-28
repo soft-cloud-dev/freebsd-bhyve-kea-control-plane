@@ -37,9 +37,9 @@ pkg install -y \
 
 pkg install -y kea
 require_commands kea-dhcp4
-for kea_hook in libdhcp_host_cmds.so libdhcp_subnet_cmds.so; do
+for kea_hook in libdhcp_host_cmds.so libdhcp_pgsql.so libdhcp_subnet_cmds.so; do
     [ -r "/usr/local/lib/kea/hooks/${kea_hook}" ] || \
-        die "Kea hook ${kea_hook} is unavailable; install the FreeBSD Kea 3.0+ package"
+        die "Kea hook ${kea_hook} is unavailable; rebuild net/kea 3.0+ with OPTIONS_SET=PGSQL"
 done
 
 # The ports Unbound service is intended for serving LAN clients. Stop and

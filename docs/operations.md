@@ -71,10 +71,11 @@ service stork_agent status
 service unbound status
 ```
 
-The Stork dashboard is at `http://MGMT_ADDR:8080`. Its database is separate from `inventory`. Back it up with:
+The Stork dashboard is at `http://MGMT_ADDR:8080`. Its database and the Kea hosts database are separate from `inventory`. Back them up with:
 
 ```sh
 sudo -u postgres pg_dump -Fc stork > stork.dump
+sudo -u postgres pg_dump -Fc kea_hosts > kea-hosts.dump
 ```
 
 ## Failure handling
@@ -100,6 +101,7 @@ Back up:
 - `/usr/local/etc/kea`
 - `/usr/local/etc/unbound`
 - `/usr/local/etc/stork`, `/var/lib/stork-agent`, and the Stork PostgreSQL database
+- the Kea PostgreSQL hosts database and `/usr/local/etc/kea/kea-host-db-password`
 - PostgreSQL inventory using `pg_dump`
 - vm-bhyve templates and guest definitions
 - ZFS snapshots and replication targets

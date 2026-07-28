@@ -35,7 +35,7 @@ Database uniqueness constraints provide secondary enforcement for VM names, MAC 
 
 The Control Agent listens on loopback and is not authenticated by default. Remote access should use a separately authenticated TLS reverse proxy on the management network; direct exposure is prohibited.
 
-JSON payloads are generated with `jq`, and the provisioner checks Kea result codes before continuing.
+JSON payloads are generated with `jq`, and the provisioner checks Kea result codes before continuing. Host reservations use a dedicated PostgreSQL database account and a generated password stored with mode `0600`; the rendered Kea configuration containing that credential remains group-restricted.
 
 ### Stork
 

@@ -25,10 +25,9 @@ Workflow: `.github/workflows/freebsd-integration.yml`
 
 A FreeBSD VM is started through `vmactions/freebsd-vm`. The job installs Kea and executes the repository's shell validation on FreeBSD.
 
-The workflow starts real instances of:
+The workflow starts a real instance of:
 
 - `kea-dhcp4`;
-- `kea-ctrl-agent`;
 - the `libdhcp_host_cmds.so` reservation hook.
 - the `libdhcp_subnet_cmds.so` subnet-management hook required by Stork.
 
@@ -39,7 +38,7 @@ It then verifies the complete reservation lifecycle through the loopback Control
 3. `reservation-get`;
 4. `reservation-del`.
 
-This proves FreeBSD shell compatibility and Kea API integration. It deliberately does not start bhyve because nested virtualization inside the FreeBSD VM is not a reliable test environment.
+The workflow uses the Host Commands `memory` operation target because the official FreeBSD binary package omits PostgreSQL support. Portable tests separately verify that production configuration rendering selects PostgreSQL and loads `libdhcp_pgsql.so`. Target-host validation exercises the actual database-backed lifecycle after `net/kea` is built with `PGSQL`. The workflow deliberately does not start bhyve because nested virtualization inside the FreeBSD VM is not a reliable test environment.
 
 Third-party GitHub Actions must be reviewed and pinned to an immutable commit SHA before treating this workflow as a protected-branch supply-chain control.
 

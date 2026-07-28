@@ -27,7 +27,22 @@ make install \
 
 The default installation builds Stork `v2.5.0` from ISC’s official source. This requires more build time and temporary disk space than the other package-based stages. To omit the Kea dashboard, add `STORK_ENABLE=no`.
 
-Stork subnet editing requires the open-source `libdhcp_subnet_cmds.so` hook shipped by the FreeBSD Kea 3.0+ package. The dependency and configuration stages stop with a clear error if an older package without this hook is installed. This file-backed deployment intentionally does not load the mutually exclusive `cb_cmds` hook.
+Stork host editing requires a writable Kea hosts database. The standard FreeBSD Kea package has its `PGSQL` option disabled, so install `net/kea` 3.0 or newer from ports with PostgreSQL support before running the installer:
+
+```sh
+git clone --depth 1 https://git.FreeBSD.org/ports.git /usr/ports
+cd /usr/ports/net/kea
+make -DBATCH OPTIONS_SET=PGSQL install clean
+```
+
+If the binary package is already installed, rebuild it with the option enabled:
+
+```sh
+cd /usr/ports/net/kea
+make -DBATCH OPTIONS_SET=PGSQL reinstall clean
+```
+
+The dependency stage verifies `libdhcp_pgsql.so`, `libdhcp_host_cmds.so`, and `libdhcp_subnet_cmds.so` and stops with a clear error when the required build is unavailable. This deployment does not load the mutually exclusive `cb_cmds` hook.
 
 The installer does not attach the physical external interface directly to the VM switch. It creates a manual vm-bhyve switch backed by the existing `LAN_IF` bridge, preserving the intended network boundary.
 
@@ -56,8 +71,9 @@ check-trust
 syntax
 install-dependencies
 configure-host
-configure-services
 init-postgresql
+init-kea-host-db
+configure-services
 init-stork
 init-ipam
 init-vm
@@ -68,8 +84,9 @@ validate-freebsd
 Each stage can also be invoked separately, for example:
 
 ```sh
-make configure-services EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0 MGMT_ADDR=10.0.10.2 DNS_ADDR=10.0.20.1
 make init-postgresql
+make init-kea-host-db
+make configure-services EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0 MGMT_ADDR=10.0.10.2 DNS_ADDR=10.0.20.1
 make init-stork
 make init-ipam IPAM_POOL=vm-lan IPAM_FIRST_HOST=10.0.20.10 IPAM_LAST_HOST=10.0.20.99
 make init-vm VM_DATASET=zroot/vm LAN_IF=bridge0

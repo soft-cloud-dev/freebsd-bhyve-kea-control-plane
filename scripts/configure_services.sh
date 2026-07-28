@@ -18,6 +18,9 @@ UNBOUND_ROOT_KEY_FILE="${UNBOUND_ROOT_KEY_FILE:-/usr/local/etc/unbound/var/root.
 KEA_API_USER="${KEA_API_USER:-stork-control-plane}"
 KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
+KEA_HOST_DB_NAME="${KEA_HOST_DB_NAME:-kea_hosts}"
+KEA_HOST_DB_USER="${KEA_HOST_DB_USER:-kea_hosts}"
+KEA_HOST_DB_PASSWORD_FILE="${KEA_HOST_DB_PASSWORD_FILE:-/usr/local/etc/kea/kea-host-db-password}"
 POSTGRES_EXPORTER_DSN="${POSTGRES_EXPORTER_DSN:-}"
 STORK_ENABLE="${STORK_ENABLE:-yes}"
 STORK_DB_NAME="${STORK_DB_NAME:-stork}"
@@ -33,6 +36,12 @@ case "$STORK_DB_NAME" in
 esac
 case "$STORK_DB_USER" in
     ''|[0-9]*|*[!A-Za-z0-9_-]*) die "invalid STORK_DB_USER" ;;
+esac
+case "$KEA_HOST_DB_NAME" in
+    ''|[0-9]*|*[!A-Za-z0-9_]*) die "invalid KEA_HOST_DB_NAME" ;;
+esac
+case "$KEA_HOST_DB_USER" in
+    ''|[0-9]*|*[!A-Za-z0-9_]*) die "invalid KEA_HOST_DB_USER" ;;
 esac
 case "$DNS_ADDR" in
     ''|*[!0-9.]*) die "DNS_ADDR must be an IPv4 address" ;;
@@ -111,12 +120,20 @@ kea_existing=""
 if [ -r /usr/local/etc/kea/kea-dhcp4.conf ]; then
     kea_existing=/usr/local/etc/kea/kea-dhcp4.conf
 fi
-for kea_hook in libdhcp_host_cmds.so libdhcp_subnet_cmds.so; do
+for kea_hook in libdhcp_host_cmds.so libdhcp_pgsql.so libdhcp_subnet_cmds.so; do
     [ -r "/usr/local/lib/kea/hooks/${kea_hook}" ] || \
-        die "Kea hook ${kea_hook} is unavailable; install the FreeBSD Kea 3.0+ package"
+        die "Kea hook ${kea_hook} is unavailable; rebuild net/kea 3.0+ with OPTIONS_SET=PGSQL"
 done
+[ -s "$KEA_HOST_DB_PASSWORD_FILE" ] || \
+    die "missing Kea hosts database password; run make init-kea-host-db first"
 sh scripts/render_kea_config.sh \
-    config/kea-dhcp4.conf "$LAN_IF" "$kea_existing" > "$kea_tmp"
+    config/kea-dhcp4.conf \
+    "$LAN_IF" \
+    "$kea_existing" \
+    "$KEA_HOST_DB_NAME" \
+    "$KEA_HOST_DB_USER" \
+    "$KEA_HOST_DB_PASSWORD_FILE" \
+    127.0.0.1 > "$kea_tmp"
 if command -v kea-dhcp4 >/dev/null 2>&1; then
     kea-dhcp4 -t "$kea_tmp"
 fi
