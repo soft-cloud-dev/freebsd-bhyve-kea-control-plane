@@ -23,10 +23,10 @@ grep -Eq 'git clone --depth 1 https://git.FreeBSD.org/ports.git' "$DEPENDENCY_SC
     die "dependency installer does not fetch a ports tree for the Kea fallback build"
 grep -Eq 'preserving it and using.*KEA_PORTS_FALLBACK_DIR' "$DEPENDENCY_SCRIPT" || \
     die "dependency installer does not preserve an incomplete primary ports tree"
-grep -Eq 'pkg install -y.*kea_python_flavor.*-docutils' "$DEPENDENCY_SCRIPT" || \
-    die "dependency installer does not use binary docutils for the Kea build"
-grep -Eq 'require_commands rst2man' "$DEPENDENCY_SCRIPT" || \
-    die "dependency installer does not verify the Kea manual-page build tool"
+grep -Eq 'pkg install -y meson.*kea_python_flavor.*-docutils' "$DEPENDENCY_SCRIPT" || \
+    die "dependency installer does not use binary Python build tools for Kea"
+grep -Eq 'require_commands meson rst2man' "$DEPENDENCY_SCRIPT" || \
+    die "dependency installer does not verify the Kea build tools"
 grep -Eq 'DEFAULT_VERSIONS=pgsql=16' "$DEPENDENCY_SCRIPT" || \
     die "Kea fallback build is not pinned to the deployed PostgreSQL major version"
 grep -Eq 'OPTIONS_SET=PGSQL' "$DEPENDENCY_SCRIPT" || \

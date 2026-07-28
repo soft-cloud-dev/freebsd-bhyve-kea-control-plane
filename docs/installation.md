@@ -29,7 +29,7 @@ The default installation builds Stork `v2.5.0` from ISC’s official source. Thi
 
 Stork host editing requires a writable Kea hosts database. The standard FreeBSD Kea package has its `PGSQL` option disabled. When the required hook is missing, the dependency stage clones the FreeBSD ports tree and rebuilds `net/kea` automatically with `PGSQL` enabled. It uses `/usr/ports` when that path is absent or already contains a complete ports tree. If `/usr/ports` exists but is incomplete, it is preserved and a managed tree at `/var/cache/control-plane/ports` is used instead. The build is pinned to PostgreSQL 16, matching the server installed by this project. Allow extra time and disk space on the first run.
 
-The Kea port uses `rst2man` to generate manual pages. The installer determines the port's Python flavor and installs the matching binary `py*-docutils` package before starting the ports build. This avoids building the legacy `py-setuptools` port currently flagged for CVE-2025-47273; the installer does not disable the ports vulnerability check.
+The Kea port uses Meson for its build and `rst2man` to generate manual pages. The installer determines the port's Python flavor and installs binary `meson` and matching `py*-docutils` packages before starting the ports build. This avoids building the legacy `py-setuptools` port currently flagged for CVE-2025-47273 through either dependency; the installer does not disable the ports vulnerability check.
 
 Use a different existing ports tree by setting `KEA_PORTS_DIR`:
 
