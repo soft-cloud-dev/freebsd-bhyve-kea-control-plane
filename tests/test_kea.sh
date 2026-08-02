@@ -19,6 +19,7 @@ VM_TEMPLATE="${VM_TEMPLATE:-${ROOT}/templates/vm-bhyve.conf}"
 VM_LOADER_MIGRATION_SCRIPT="${VM_LOADER_MIGRATION_SCRIPT:-${ROOT}/scripts/migrate_vm_to_bhyveload.sh}"
 FREEBSD_JAIL_PROVISION_SCRIPT="${FREEBSD_JAIL_PROVISION_SCRIPT:-${ROOT}/scripts/provision_freebsd_jail_node.sh}"
 FREEBSD_JAIL_CLUSTER_SCRIPT="${FREEBSD_JAIL_CLUSTER_SCRIPT:-${ROOT}/scripts/provision_freebsd_jail_cluster.sh}"
+FREEBSD_CLUSTER_SCRIPT="${FREEBSD_CLUSTER_SCRIPT:-${ROOT}/scripts/freebsd_cluster.sh}"
 FREEBSD_JAIL_PROFILE="${FREEBSD_JAIL_PROFILE:-${ROOT}/config/cloud-init/freebsd-jail-node.yaml}"
 
 . "${ROOT}/scripts/lib.sh"
@@ -34,7 +35,8 @@ FREEBSD_JAIL_PROFILE="${FREEBSD_JAIL_PROFILE:-${ROOT}/config/cloud-init/freebsd-
 [ -r "$VM_TEMPLATE" ] || die "missing vm-bhyve template"
 [ -r "$VM_LOADER_MIGRATION_SCRIPT" ] || die "missing VM loader migration script"
 [ -r "$FREEBSD_JAIL_PROVISION_SCRIPT" ] || die "missing FreeBSD jail-node provisioner"
-[ -r "$FREEBSD_JAIL_CLUSTER_SCRIPT" ] || die "missing FreeBSD jail-cluster provisioner"
+[ -r "$FREEBSD_JAIL_CLUSTER_SCRIPT" ] || die "missing FreeBSD jail-cluster wrapper"
+[ -r "$FREEBSD_CLUSTER_SCRIPT" ] || die "missing canonical FreeBSD cluster lifecycle"
 [ -r "$FREEBSD_JAIL_PROFILE" ] || die "missing FreeBSD jail-node cloud-init profile"
 
 grep -Eq 'git clone --depth 1 https://git.FreeBSD.org/ports.git' "$DEPENDENCY_SCRIPT" || \
@@ -123,13 +125,19 @@ grep -Eq 'kld_list\+=if_wg' "$FREEBSD_JAIL_PROFILE" || \
 grep -Eq 'CLOUD_INIT_EXTRA_FILE' "$PROVISION_SCRIPT" || \
     die "VM provisioner does not support a cloud-init extension"
 grep -Eq 'JAIL_NODE_COUNT.*:-3' "$FREEBSD_JAIL_CLUSTER_SCRIPT" || \
-    die "FreeBSD jail-cluster provisioner does not default to three nodes"
-grep -Eq "printf '%02d'" "$FREEBSD_JAIL_CLUSTER_SCRIPT" || \
-    die "FreeBSD jail-cluster provisioner does not use stable two-digit node names"
-preflight_loop=$(grep -n 'active_count=.*psql' "$FREEBSD_JAIL_CLUSTER_SCRIPT" | sed -n '1s/:.*//p')
-provision_loop=$(grep -n '^provisioned_names=' "$FREEBSD_JAIL_CLUSTER_SCRIPT" | sed -n '1s/:.*//p')
-[ -n "$preflight_loop" ] && [ -n "$provision_loop" ] && [ "$preflight_loop" -lt "$provision_loop" ] || \
-    die "FreeBSD jail-cluster inventory preflight must complete before provisioning"
+    die "legacy FreeBSD jail-cluster wrapper does not default to three nodes"
+grep -Eq 'exec sh .*freebsd_cluster\.sh.* up' "$FREEBSD_JAIL_CLUSTER_SCRIPT" || \
+    die "legacy FreeBSD jail-cluster wrapper does not delegate to the canonical lifecycle"
+grep -Fq "printf '%s-%02d\\n'" "$FREEBSD_CLUSTER_SCRIPT" || \
+    die "FreeBSD cluster lifecycle does not use stable two-digit node names"
+cluster_preflight=$(grep -n '^preflight_index=1' "$FREEBSD_CLUSTER_SCRIPT" | sed -n '1s/:.*//p')
+cluster_provision=$(grep -n '^created_nodes=' "$FREEBSD_CLUSTER_SCRIPT" | sed -n '1s/:.*//p')
+[ -n "$cluster_preflight" ] && [ -n "$cluster_provision" ] && [ "$cluster_preflight" -lt "$cluster_provision" ] || \
+    die "FreeBSD cluster inventory preflight must complete before provisioning"
+grep -Eq '^rollback_cluster\(\)' "$FREEBSD_CLUSTER_SCRIPT" || \
+    die "FreeBSD cluster lifecycle does not define partial-failure rollback"
+grep -Eq 'KUBECONFIG_SOURCE' "$FREEBSD_CLUSTER_SCRIPT" || \
+    die "FreeBSD cluster lifecycle does not support kubectl bootstrap"
 jq -e '
     .Dhcp4.subnet4[0]["option-data"]
     | any(.name == "interface-mtu" and .data == "1496")
