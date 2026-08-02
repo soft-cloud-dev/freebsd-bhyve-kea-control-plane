@@ -46,6 +46,7 @@ verify: fmt lint test examples
 integration:
 	@test -n "${BKCP_TEST_DATABASE_URL}" || { echo "BKCP_TEST_DATABASE_URL is required" >&2; exit 2; }
 	${GO} test -race -tags=integration ./internal/state/postgres/...
+	${GO} test -race -tags=integration ./internal/metrics/...
 
 doctor: build
 	"${CPCTL}" doctor --config "${SITE}" --offline
