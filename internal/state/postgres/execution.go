@@ -370,7 +370,7 @@ func loadAllocationTx(ctx context.Context, tx pgx.Tx, resourceUUID string) (stat
 	var out state.Allocation
 	var ip, mac, dataset, zvol, digest *string
 	var kea *int
-	err := tx.QueryRow(ctx, `SELECT pool_name,ip_address::text,mac_address::text,dataset_name,zvol_name,kea_subnet_id,image_name,image_digest,allocation_generation,allocated_at,released_at FROM bkcp.vm_allocations WHERE resource_uuid=$1`, resourceUUID).Scan(&out.PoolName, &ip, &mac, &dataset, &zvol, &kea, &out.ImageName, &digest, &out.AllocationGeneration, &out.AllocatedAt, &out.ReleasedAt)
+	err := tx.QueryRow(ctx, `SELECT pool_name,host(ip_address)::text,mac_address::text,dataset_name,zvol_name,kea_subnet_id,image_name,image_digest,allocation_generation,allocated_at,released_at FROM bkcp.vm_allocations WHERE resource_uuid=$1`, resourceUUID).Scan(&out.PoolName, &ip, &mac, &dataset, &zvol, &kea, &out.ImageName, &digest, &out.AllocationGeneration, &out.AllocatedAt, &out.ReleasedAt)
 	if err != nil {
 		return state.Allocation{}, err
 	}

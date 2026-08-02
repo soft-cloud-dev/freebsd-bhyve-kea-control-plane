@@ -202,7 +202,7 @@ FROM bkcp.vm_specs WHERE resource_uuid = $1 AND generation = $2`, out.Resource.U
 	var ipAddress, macAddress, datasetName, zvolName, imageDigest *string
 	var keaSubnetID *int
 	if err := r.pool.QueryRow(ctx, `
-SELECT pool_name, ip_address::text, mac_address::text, dataset_name, zvol_name, kea_subnet_id, image_name, image_digest, allocation_generation, allocated_at, released_at
+SELECT pool_name, host(ip_address)::text, mac_address::text, dataset_name, zvol_name, kea_subnet_id, image_name, image_digest, allocation_generation, allocated_at, released_at
 FROM bkcp.vm_allocations WHERE resource_uuid = $1`, out.Resource.UUID).Scan(
 		&allocation.PoolName, &ipAddress, &macAddress, &datasetName, &zvolName, &keaSubnetID, &allocation.ImageName, &imageDigest, &allocation.AllocationGeneration, &allocation.AllocatedAt, &allocation.ReleasedAt,
 	); err == nil {
