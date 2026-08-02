@@ -1,0 +1,20 @@
+// Grafana Cloud FreeBSD node observability.
+// Run one Alloy process per bare-metal host or cluster node.
+
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+prometheus.exporter.unix "freebsd_node" {
+	include_exporter_metrics = true
+	enable_collectors        = ["devstat", "zfs"]
+
+	filesystem {
+		fs_types_exclude     = "^devfs$"
+		mount_points_exclude = "^/(dev)($|/)"
+		mount_timeout        = "5s"
+	}
+
+	textfile {
+		directory = "/var/cache
