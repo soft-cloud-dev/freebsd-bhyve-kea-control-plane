@@ -29,7 +29,9 @@ node_exporter + postgres_exporter + Stork Kea exporter
 Stork server (management + VM-LAN TCP/8080) <---- Stork agent (loopback TCP/8081)
 ```
 
-PostgreSQL is authoritative for inventory and IPAM. A separate PostgreSQL hosts database is Kea's writable reservation backend, allowing Stork and the provisioner to use the same Host Commands API. Unbound provides validating, recursive DNS to the VM LAN on `10.0.20.1` only. The FreeBSD host forwards and NATs VM traffic through the external interface while PF blocks the VM LAN from the management network and host services other than DHCP, DNS, ICMP, and the Stork UI. Stork provides the Kea operations dashboard and uses its own PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana is management-only, while Stork is available from both trusted subnets.
+PostgreSQL is authoritative for inventory and IPAM. A separate PostgreSQL hosts database is the sole writable authority for Kea reservations, allowing Stork and the provisioner to share the Host Commands API without copying runtime reservations into `kea-dhcp4.conf`. Unbound provides validating, recursive DNS to the VM LAN on `10.0.20.1` only. The FreeBSD host forwards and NATs VM traffic through the external interface while PF blocks the VM LAN from the management network and host services other than DHCP, DNS, ICMP, and the Stork UI. Stork provides the Kea operations dashboard and uses its own PostgreSQL database. Prometheus and exporters remain loopback-only; Grafana is management-only, while Stork is available from both trusted subnets.
+
+VM MAC addresses are allocated transactionally by PostgreSQL from a stable control-plane namespace and checked against active inventory. FreeBSD cloud images are accepted only after SHA-256 verification and are reused only when their verification marker and raw-cache digest remain valid.
 
 ## Repository layout
 
@@ -48,15 +50,18 @@ config/
 db/
   001_inventory.sql
   002_monitoring.sql
+  003_mac_allocator.sql
 docs/
   architecture.md
   installation.md
   observability.md
   operations.md
   security-model.md
+  testing.md
 scripts/
   01_host_setup.sh
   02_install_dependencies.sh
+  fetch_freebsd_cloud_image.sh
   init_kea_host_db.sh
   init_stork.sh
   install_stork.sh
@@ -68,6 +73,7 @@ scripts/
 templates/
   vm-bhyve.conf
 tests/
+  test_cloud_image.sh
   test_kea.sh
   test_pf.sh
   test_provisioner.sh
@@ -82,13 +88,15 @@ LICENSE
 - PF defaults to deny and exposes SSH, DHCP, DNS, Grafana, and Stork only on their intended interfaces.
 - Kea Control Agent, Prometheus, node_exporter, postgres_exporter, and PostgreSQL remain local to the host.
 - Provisioning inputs are syntactically restricted before reaching `vm-bhyve`, SQL, JSON, or cloud-init YAML.
-- Kea API responses are validated; failed operations trigger compensating rollback.
+- Kea API requests are authenticated and explicitly target the PostgreSQL reservation backend.
+- Cloud images are checksum-verified before they are written to guest storage.
+- Failed provisioning operations trigger compensating rollback.
 
-See `docs/security-model.md` and `docs/observability.md`.
+See `docs/security-model.md`, `docs/architecture.md`, and `docs/observability.md`.
 
 ## Installation
 
-Review all interface names, networks, package versions, service paths, database authentication, and Grafana bindings before execution.
+Review all interface names, networks, package versions, service paths, database authentication, Grafana bindings, `CONTROL_PLANE_ID`, and cloud-image checksum policy before execution.
 
 ```sh
 su -
@@ -117,12 +125,22 @@ ON CONFLICT (name) DO NOTHING;
 SQL
 ```
 
+Existing installations must rerun `scripts/init_postgresql.sh` after upgrading so `db/003_mac_allocator.sql` is applied.
+
 Initialize `vm-bhyve` after reviewing its datastore, switch, template, and bridge configuration:
 
 ```sh
 vm init
 install -m 0644 templates/vm-bhyve.conf /zroot/vm/.templates/freebsd.conf
 ```
+
+Pre-fetch and verify the FreeBSD cloud image:
+
+```sh
+make fetch-cloud-image
+```
+
+The fetcher derives `CHECKSUM.SHA256` from the image directory. A site may instead pin the compressed image digest with `FREEBSD_CLOUD_IMAGE_SHA256` or override `FREEBSD_CLOUD_IMAGE_CHECKSUM_URL`.
 
 Start services:
 
@@ -139,7 +157,7 @@ Stork is enabled by default. Its server and agent are built from the pinned offi
 
 ## Provisioning
 
-`vm-bhyve` and ZFS dataset administration require root privileges (via `sudo` or `su -`):
+`vm-bhyve` and ZFS dataset administration require root privileges through `sudo` or `su -`. Set `CONTROL_PLANE_ID` to a stable cluster identifier. When omitted, the provisioner uses `/etc/hostid` and then the hostname as fallbacks.
 
 ```sh
 chmod 0750 scripts/*.sh tests/*.sh
@@ -148,8 +166,16 @@ sudo PGDATABASE=inventory \
   IPAM_POOL=vm-lan \
   VM_OWNER=admin \
   CLOUD_INIT_USER=admin \
+  CONTROL_PLANE_ID=softcloud-lab-01 \
   SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
   sh scripts/provision_vm.sh db-node-01 freebsd
+```
+
+The provisioning path performs:
+
+```text
+preflight -> verified image -> transactional IP/MAC/inventory
+          -> PostgreSQL-backed Kea reservation -> boot -> finalize
 ```
 
 Deprovision:
@@ -173,11 +199,13 @@ service prometheus status
 service grafana status
 ```
 
+The manually triggered bare-metal workflow verifies authenticated access to the Kea PostgreSQL reservation backend, VM boot, cloud-init SSH access, and cleanup.
+
 ## Known boundaries
 
 - `vm-bhyve` and ZFS administration operations require `root` privileges.
-- The `vm info` parser is isolated but still depends on human-readable `vm-bhyve` output.
-- Kea and Stork update reservations through `reservation-add`/`reservation-del` against a dedicated PostgreSQL hosts database.
+- Shell traps provide best-effort compensation but are not a crash-safe distributed transaction engine.
+- Kea and Stork update reservations only through `reservation-add` and `reservation-del` against the dedicated PostgreSQL hosts database.
 - The standard FreeBSD Kea package does not enable PostgreSQL support; the dependency stage automatically rebuilds `net/kea` from ports with its `PGSQL` option.
 - Production installation requires a FreeBSD release currently supported by the FreeBSD Security Team; vulnerability checks are not disabled for end-of-life hosts.
 - Stork subnet editing uses Kea's open-source `libdhcp_subnet_cmds.so` hook and therefore requires the FreeBSD Kea 3.0+ package.

@@ -46,7 +46,8 @@ if [ -n "$HOST_DB_NAME" ]; then
         --arg db_user "$HOST_DB_USER" \
         --arg db_host "$HOST_DB_HOST" \
         --rawfile db_password "$HOST_DB_PASSWORD_FILE" '
-        .Dhcp4["hosts-databases"] = [{
+        .Dhcp4.subnet4 |= map(.reservations = [])
+        | .Dhcp4["hosts-databases"] = [{
             type: "postgresql",
             name: $db_name,
             user: $db_user,

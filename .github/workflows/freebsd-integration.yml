@@ -29,7 +29,7 @@ jobs:
           copyback: false
           prepare: |
             set -eu
-            pkg install -y bash curl jq kea gmake shellcheck
+            pkg install -y bash curl jq kea gmake
             pkg install -y unbound
             install -d -m 0750 /var/run/kea /var/db/kea /usr/local/etc/kea
           run: |

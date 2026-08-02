@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "${SCRIPT_DIR}/lib.sh"
+
 PGDATABASE="${PGDATABASE:-inventory}"
 PGUSER="${PGUSER:-postgres}"
 KEA_CA_URL="${KEA_CA_URL:-http://127.0.0.1:8000/}"
@@ -14,11 +17,15 @@ CLOUD_INIT_EXTRA_FILE="${CLOUD_INIT_EXTRA_FILE:-}"
 IPAM_POOL="${IPAM_POOL:-vm-lan}"
 VM_DATASET="${VM_DATASET:-zroot/vm}"
 VM_ROOT="${VM_ROOT:-}"
+CONTROL_PLANE_ID="${CONTROL_PLANE_ID:-}"
 FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL:-https://download.freebsd.org/releases/VM-IMAGES/14.3-RELEASE/amd64/Latest/FreeBSD-14.3-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz}"
 FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE:-/var/cache/control-plane/freebsd-cloud.raw}"
+FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256:-}"
+FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL:-${FREEBSD_CLOUD_IMAGE_URL%/*}/CHECKSUM.SHA256}"
+FETCH_IMAGE_SCRIPT="${FETCH_IMAGE_SCRIPT:-${SCRIPT_DIR}/fetch_freebsd_cloud_image.sh}"
 
 usage() {
-    cat >&2 <<EOF
+    cat >&2 <<EOF_USAGE
 Usage: $0 <vm_name> <template>
 
 Required cloud-init key input:
@@ -28,11 +35,9 @@ or:
 
 Optional cloud-init extension:
   CLOUD_INIT_EXTRA_FILE=/path/to/profile.yaml
-EOF
+EOF_USAGE
     exit 64
 }
-
-. "$(dirname "$0")/lib.sh"
 
 yaml_single_quote() {
     printf '%s' "$1" | sed "s/'/''/g"
@@ -62,7 +67,22 @@ resolve_vm_root() {
     printf '%s\n' "$mountpoint"
 }
 
+resolve_control_plane_id() {
+    if [ -n "$CONTROL_PLANE_ID" ]; then
+        printf '%s' "$CONTROL_PLANE_ID" | tr -d '\r\n'
+        return
+    fi
 
+    if [ -r /etc/hostid ]; then
+        host_id=$(awk 'NF { print; exit }' /etc/hostid | tr -d '\r\n')
+        if [ -n "$host_id" ]; then
+            printf '%s\n' "$host_id"
+            return
+        fi
+    fi
+
+    hostname | tr -d '\r\n'
+}
 
 create_seed_iso() {
     seed_source=$1
@@ -97,7 +117,8 @@ case "$CLOUD_INIT_USER" in
 esac
 
 require_root
-require_commands vm psql curl jq zfs mktemp sysrc
+require_commands vm psql curl jq zfs mktemp sysrc hostname
+[ -r "$FETCH_IMAGE_SCRIPT" ] || die "missing cloud image fetcher: $FETCH_IMAGE_SCRIPT"
 
 escaped_name=$(sql_literal "$VM_NAME")
 active_vm=$(psql -X -v ON_ERROR_STOP=1 -qAt -F '|' <<SQL
@@ -116,9 +137,9 @@ if vm info "$VM_NAME" >/dev/null 2>&1; then
 fi
 
 if [ -n "$active_vm" ]; then
-    IFS='|' read -r active_status active_ip active_mac active_dataset <<EOF
+    IFS='|' read -r active_status active_ip active_mac active_dataset <<EOF_ACTIVE
 $active_vm
-EOF
+EOF_ACTIVE
     if [ "$guest_exists" -eq 1 ]; then
         die "VM '${VM_NAME}' already exists in active inventory and vm-bhyve (status=${active_status}, ip=${active_ip}, mac=${active_mac}, dataset=${active_dataset}); use the existing VM, deprovision it explicitly with scripts/deprovision_vm.sh, or choose another name"
     fi
@@ -142,6 +163,8 @@ case "$SSH_KEY" in
     *) die "cloud-init key must be an Ed25519 OpenSSH public key" ;;
 esac
 
+CONTROL_PLANE_NAMESPACE=$(resolve_control_plane_id)
+[ -n "$CONTROL_PLANE_NAMESPACE" ] || die "CONTROL_PLANE_ID resolved to an empty value"
 VM_ROOT=$(resolve_vm_root)
 VM_DIR="${VM_ROOT%/}/${VM_NAME}"
 VM_CONFIG="${VM_DIR}/${VM_NAME}.conf"
@@ -175,6 +198,7 @@ rollback() {
                 '{
                     command:"reservation-del",
                     arguments:{
+                        "operation-target":"database",
                         "subnet-id":$subnet_id,
                         "identifier-type":"hw-address",
                         identifier:$mac
@@ -191,22 +215,6 @@ rollback() {
                     }
                 }')
             kea_request "$lease_payload" >/dev/null 2>&1 || true
-
-            if [ -w "/usr/local/etc/kea/kea-dhcp4.conf" ] || [ -f "/usr/local/etc/kea/kea-dhcp4.conf" ]; then
-                tmp_conf=$(mktemp)
-                jq --arg mac "$MAC_ADDRESS" \
-                   --argjson subnet_id "$KEA_SUBNET_ID" '
-                   .Dhcp4.subnet4 |= map(
-                       if .id == $subnet_id then
-                           .reservations = ((.reservations // []) | map(select(.["hw-address"] != $mac)))
-                       else
-                           .
-                       end
-                   )
-                ' /usr/local/etc/kea/kea-dhcp4.conf > "$tmp_conf" 2>/dev/null && \
-                cat "$tmp_conf" > /usr/local/etc/kea/kea-dhcp4.conf 2>/dev/null && \
-                rm -f "$tmp_conf"
-            fi
         fi
 
         if [ "$inserted_vm" -eq 1 ]; then
@@ -231,7 +239,7 @@ SQL
 }
 trap rollback EXIT INT TERM HUP
 
-echo "[1/7] Creating VM"
+echo "[1/7] Creating VM and installing verified image"
 vm create -t "$TEMPLATE" "$VM_NAME"
 created_vm=1
 [ -d "$VM_DIR" ] || die "vm-bhyve guest directory not found: $VM_DIR"
@@ -246,43 +254,73 @@ fi
 
 zvol_dev="/dev/zvol/${VM_DATASET}/${VM_NAME}/disk0"
 if [ -c "$zvol_dev" ] || [ -b "$zvol_dev" ]; then
-    if [ ! -f "$FREEBSD_CLOUD_IMAGE_CACHE" ]; then
-        if [ -f "/tmp/freebsd-cloud.raw" ]; then
-            FREEBSD_CLOUD_IMAGE_CACHE="/tmp/freebsd-cloud.raw"
-        else
-            echo " - caching FreeBSD cloud image..."
-            mkdir -p "$(dirname "$FREEBSD_CLOUD_IMAGE_CACHE")" 2>/dev/null || true
-            tmp_xz="${FREEBSD_CLOUD_IMAGE_CACHE}.xz"
-            if command -v curl >/dev/null 2>&1; then
-                curl -fsSL -o "$tmp_xz" "$FREEBSD_CLOUD_IMAGE_URL"
-            elif command -v fetch >/dev/null 2>&1; then
-                fetch -o "$tmp_xz" "$FREEBSD_CLOUD_IMAGE_URL"
-            else
-                die "neither curl nor fetch is available to download cloud image"
-            fi
-            unxz -f "$tmp_xz"
-        fi
-    fi
-    echo " - writing FreeBSD cloud image to $zvol_dev"
+    FREEBSD_CLOUD_IMAGE_URL="$FREEBSD_CLOUD_IMAGE_URL" \
+    FREEBSD_CLOUD_IMAGE_CACHE="$FREEBSD_CLOUD_IMAGE_CACHE" \
+    FREEBSD_CLOUD_IMAGE_SHA256="$FREEBSD_CLOUD_IMAGE_SHA256" \
+    FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="$FREEBSD_CLOUD_IMAGE_CHECKSUM_URL" \
+        sh "$FETCH_IMAGE_SCRIPT"
+    echo " - writing verified FreeBSD cloud image to $zvol_dev"
     dd if="$FREEBSD_CLOUD_IMAGE_CACHE" of="$zvol_dev" bs=1M status=none
 fi
 
-echo "[2/7] Generating VM MAC address"
-mac_suffix=$(printf '%s' "$VM_NAME" | md5 -q | cut -c1-6 | sed 's/\(..\)/\1:/g; s/:$//')
-MAC_ADDRESS="58:9c:fc:${mac_suffix}"
-sysrc -f "$VM_CONFIG" network0_mac="$MAC_ADDRESS" >/dev/null
-echo " - assigned deterministic MAC: $MAC_ADDRESS"
+echo "[2/7] Allocating address, MAC, and inventory state"
+escaped_owner=$(sql_literal "$VM_OWNER")
+escaped_template=$(sql_literal "$TEMPLATE")
+escaped_pool=$(sql_literal "$IPAM_POOL")
+escaped_dataset=$(sql_literal "${VM_DATASET}/${VM_NAME}")
+escaped_namespace=$(sql_literal "$CONTROL_PLANE_NAMESPACE")
 
-echo "[3/7] Creating cloud-init NoCloud seed"
+DB_RESULT=$(psql -X -v ON_ERROR_STOP=1 -qAt -F '|' <<SQL
+BEGIN;
+WITH allocation AS (
+    SELECT * FROM allocate_ip('${escaped_pool}')
+), mac_allocation AS (
+    SELECT allocate_mac('${escaped_namespace}', '${escaped_name}') AS mac_address
+), inserted AS (
+    INSERT INTO vms (
+        name, owner_name, dataset, mac_address, ip_address,
+        pool_id, vlan, template, status
+    )
+    SELECT
+        '${escaped_name}', '${escaped_owner}', '${escaped_dataset}',
+        mac_allocation.mac_address, allocation.ip_address,
+        allocation.pool_id, allocation.vlan, '${escaped_template}', 'provisioning'
+    FROM allocation
+    CROSS JOIN mac_allocation
+    RETURNING uuid, ip_address, pool_id, vlan, mac_address
+)
+SELECT inserted.uuid, inserted.ip_address, inserted.pool_id, inserted.vlan,
+       pools.kea_subnet_id, inserted.mac_address
+  FROM inserted
+  JOIN ipam_pools pools ON pools.id = inserted.pool_id;
+COMMIT;
+SQL
+)
+
+IFS='|' read -r VM_UUID IP_ADDRESS POOL_ID VLAN KEA_SUBNET_ID MAC_ADDRESS <<EOF_DB
+$DB_RESULT
+EOF_DB
+[ -n "$VM_UUID" ] || die "database did not return a VM UUID"
+[ -n "$IP_ADDRESS" ] || die "database did not return an IP address"
+[ -n "$MAC_ADDRESS" ] || die "database did not return a MAC address"
+inserted_vm=1
+
+echo "[3/7] Configuring allocated MAC address"
+sysrc -f "$VM_CONFIG" network0_mac="$MAC_ADDRESS" >/dev/null
+[ "$(sysrc -f "$VM_CONFIG" -n network0_mac)" = "$MAC_ADDRESS" ] || \
+    die "could not persist allocated MAC address in $VM_CONFIG"
+echo " - assigned ${MAC_ADDRESS} in namespace ${CONTROL_PLANE_NAMESPACE}"
+
+echo "[4/7] Creating cloud-init NoCloud seed"
 seed_dir=$(mktemp -d "${TMPDIR:-/tmp}/${VM_NAME}.cloud-init.XXXXXX")
-cat > "${seed_dir}/meta-data" <<EOF
+cat > "${seed_dir}/meta-data" <<EOF_META
 instance-id: ${VM_NAME}
 local-hostname: ${VM_NAME}
-EOF
+EOF_META
 
 cloud_user=$(yaml_single_quote "$CLOUD_INIT_USER")
 cloud_key=$(yaml_single_quote "$SSH_KEY")
-cat > "${seed_dir}/user-data" <<EOF
+cat > "${seed_dir}/user-data" <<EOF_USER
 #cloud-config
 users:
   - default
@@ -291,7 +329,7 @@ users:
     shell: /bin/sh
     ssh_authorized_keys:
       - '${cloud_key}'
-EOF
+EOF_USER
 
 if [ -n "$CLOUD_INIT_EXTRA_FILE" ]; then
     [ -r "$CLOUD_INIT_EXTRA_FILE" ] || \
@@ -307,43 +345,7 @@ create_seed_iso "$seed_dir" "${VM_DIR}/seed.iso"
 rm -rf "$seed_dir"
 seed_dir=""
 
-echo "[4/7] Allocating address and recording inventory"
-escaped_owner=$(sql_literal "$VM_OWNER")
-escaped_template=$(sql_literal "$TEMPLATE")
-escaped_pool=$(sql_literal "$IPAM_POOL")
-escaped_dataset=$(sql_literal "${VM_DATASET}/${VM_NAME}")
-
-DB_RESULT=$(psql -X -v ON_ERROR_STOP=1 -qAt -F '|' <<SQL
-BEGIN;
-WITH allocation AS (
-    SELECT * FROM allocate_ip('${escaped_pool}')
-), inserted AS (
-    INSERT INTO vms (
-        name, owner_name, dataset, mac_address, ip_address,
-        pool_id, vlan, template, status
-    )
-    SELECT
-        '${escaped_name}', '${escaped_owner}', '${escaped_dataset}',
-        '${MAC_ADDRESS}'::macaddr, allocation.ip_address,
-        allocation.pool_id, allocation.vlan, '${escaped_template}', 'provisioning'
-    FROM allocation
-    RETURNING uuid, ip_address, pool_id, vlan
-)
-SELECT inserted.uuid, inserted.ip_address, inserted.pool_id, inserted.vlan, pools.kea_subnet_id
-  FROM inserted
-  JOIN ipam_pools pools ON pools.id = inserted.pool_id;
-COMMIT;
-SQL
-)
-
-IFS='|' read -r VM_UUID IP_ADDRESS POOL_ID VLAN KEA_SUBNET_ID <<EOF
-$DB_RESULT
-EOF
-[ -n "$VM_UUID" ] || die "database did not return a VM UUID"
-[ -n "$IP_ADDRESS" ] || die "database did not return an IP address"
-inserted_vm=1
-
-echo "[5/7] Adding Kea reservation"
+echo "[5/7] Adding PostgreSQL-backed Kea reservation"
 add_payload=$(jq -n \
     --arg mac "$MAC_ADDRESS" \
     --arg ip "$IP_ADDRESS" \
@@ -352,6 +354,7 @@ add_payload=$(jq -n \
     '{
         command:"reservation-add",
         arguments:{
+            "operation-target":"database",
             reservation:{
                 "subnet-id":$subnet_id,
                 "hw-address":$mac,
@@ -364,24 +367,6 @@ add_response=$(kea_request "$add_payload")
 add_result=$(printf '%s' "$add_response" | jq -er '.[0].result')
 [ "$add_result" -eq 0 ] || die "Kea reservation-add failed: $add_response"
 kea_reserved=1
-
-if [ -w "/usr/local/etc/kea/kea-dhcp4.conf" ] || [ -f "/usr/local/etc/kea/kea-dhcp4.conf" ]; then
-    tmp_conf=$(mktemp)
-    jq --arg mac "$MAC_ADDRESS" \
-       --arg ip "$IP_ADDRESS" \
-       --arg hostname "$VM_NAME" \
-       --argjson subnet_id "$KEA_SUBNET_ID" '
-       .Dhcp4.subnet4 |= map(
-           if .id == $subnet_id then
-               .reservations = (.reservations // []) + [{"hw-address": $mac, "ip-address": $ip, "hostname": $hostname}]
-           else
-               .
-           end
-       )
-    ' /usr/local/etc/kea/kea-dhcp4.conf > "$tmp_conf" && \
-    cat "$tmp_conf" > /usr/local/etc/kea/kea-dhcp4.conf && \
-    rm -f "$tmp_conf"
-fi
 
 echo "[6/7] Starting VM"
 vm start "$VM_NAME"

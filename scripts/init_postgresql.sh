@@ -51,6 +51,6 @@ create_db() {
 create_db
 run_sql db/001_inventory.sql
 run_sql db/002_monitoring.sql
+run_sql db/003_mac_allocator.sql
 
 echo "[+] PostgreSQL initialized successfully."
-

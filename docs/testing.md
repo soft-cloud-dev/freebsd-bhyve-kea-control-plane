@@ -15,7 +15,10 @@ It validates:
 - portable repository tests;
 - JSON syntax;
 - YAML syntax;
-- accidental committed private keys, SSH public keys, or credential-bearing PostgreSQL DSNs.
+- accidental committed private keys, SSH public keys, or credential-bearing PostgreSQL DSNs;
+- verified cloud-image caching, tamper detection, and checksum rejection;
+- reservation authority invariants, including explicit PostgreSQL operation targets and the absence of direct runtime edits to `kea-dhcp4.conf`;
+- transactional MAC allocator wiring and advisory-lock serialization.
 
 This layer does not call real FreeBSD services, `vm-bhyve`, ZFS, PF, Kea, Unbound, PostgreSQL, Stork, Prometheus, or Grafana. It statically validates the Unbound listener and client boundary, Stork source pin, loopback agent/exporter bindings, database bootstrap, and startup readiness contract.
 
@@ -28,17 +31,17 @@ A FreeBSD VM is started through `vmactions/freebsd-vm`. The job installs Kea and
 The workflow starts a real instance of:
 
 - `kea-dhcp4`;
-- the `libdhcp_host_cmds.so` reservation hook.
+- the `libdhcp_host_cmds.so` reservation hook;
 - the `libdhcp_subnet_cmds.so` subnet-management hook required by Stork.
 
-It then verifies the complete reservation lifecycle through the loopback Control Agent:
+It then verifies the complete reservation lifecycle through the authenticated loopback Control Agent:
 
 1. service readiness;
 2. `reservation-add`;
 3. `reservation-get`;
 4. `reservation-del`.
 
-The workflow uses the Host Commands `memory` operation target because the official FreeBSD binary package omits PostgreSQL support. Portable tests separately verify that production configuration rendering selects PostgreSQL and loads `libdhcp_pgsql.so`. Target-host validation exercises the actual database-backed lifecycle after `net/kea` is built with `PGSQL`. The workflow deliberately does not start bhyve because nested virtualization inside the FreeBSD VM is not a reliable test environment.
+The workflow uses the Host Commands `memory` operation target because the official FreeBSD binary package omits PostgreSQL support. Portable tests separately verify that production configuration rendering selects PostgreSQL, clears static reservation arrays, and loads `libdhcp_pgsql.so`. Target-host validation exercises the actual database-backed lifecycle after `net/kea` is built with `PGSQL`. The workflow deliberately does not start bhyve because nested virtualization inside the FreeBSD VM is not a reliable test environment.
 
 Third-party GitHub Actions must be reviewed and pinned to an immutable commit SHA before treating this workflow as a protected-branch supply-chain control.
 
@@ -59,8 +62,9 @@ The runner must be a dedicated FreeBSD host with:
 - `vmm` support available;
 - vm-bhyve initialized;
 - the `freebsd` cloud-image template installed;
-- PostgreSQL inventory initialized;
-- Kea DHCP4 and Control Agent running;
+- PostgreSQL inventory initialized through `db/003_mac_allocator.sql`;
+- Kea DHCP4 and Control Agent running with readable API credential files;
+- a PostgreSQL Kea hosts backend;
 - a test IPAM pool called `vm-lan`;
 - network reachability from the runner to the allocated guest subnet.
 
@@ -69,10 +73,10 @@ The E2E workflow:
 1. generates an ephemeral Ed25519 key;
 2. provisions a VM through `scripts/provision_vm.sh`;
 3. verifies PostgreSQL inventory state;
-4. verifies the Kea reservation;
+4. verifies the database-backed Kea reservation through authenticated HTTP;
 5. waits for cloud-init-provisioned SSH access;
 6. collects diagnostics;
-7. destroys the VM and releases its reservation and IP allocation.
+7. destroys the VM and releases its reservation, lease, and IP allocation.
 
 Use a dedicated runner group and GitHub Environment approval for this workflow. Do not attach a general-purpose production hypervisor as an unrestricted repository runner.
 
@@ -99,7 +103,7 @@ Any new integration or E2E test must define cleanup for every external side effe
 
 - bhyve processes and vm-bhyve guest definitions;
 - ZFS datasets and zvols;
-- Kea reservations;
+- Kea reservations and leases;
 - PostgreSQL inventory rows and IPAM allocations;
 - temporary SSH keys and cloud-init media;
 - temporary bridges, tap devices, and test configuration files.

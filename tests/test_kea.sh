@@ -8,9 +8,12 @@ KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
 KEA_RENDER_SCRIPT="${KEA_RENDER_SCRIPT:-${ROOT}/scripts/render_kea_config.sh}"
 KEA_DB_INIT_SCRIPT="${KEA_DB_INIT_SCRIPT:-${ROOT}/scripts/init_kea_host_db.sh}"
+POSTGRES_INIT_SCRIPT="${POSTGRES_INIT_SCRIPT:-${ROOT}/scripts/init_postgresql.sh}"
+MAC_ALLOCATOR_SQL="${MAC_ALLOCATOR_SQL:-${ROOT}/db/003_mac_allocator.sql}"
 DEPENDENCY_SCRIPT="${DEPENDENCY_SCRIPT:-${ROOT}/scripts/02_install_dependencies.sh}"
 PROVISION_SCRIPT="${PROVISION_SCRIPT:-${ROOT}/scripts/provision_vm.sh}"
 ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT:-${ROOT}/scripts/rollback_vm.sh}"
+FETCH_IMAGE_SCRIPT="${FETCH_IMAGE_SCRIPT:-${ROOT}/scripts/fetch_freebsd_cloud_image.sh}"
 DEPROVISION_SCRIPT="${DEPROVISION_SCRIPT:-${ROOT}/scripts/deprovision_vm.sh}"
 VM_TEMPLATE="${VM_TEMPLATE:-${ROOT}/templates/vm-bhyve.conf}"
 VM_LOADER_MIGRATION_SCRIPT="${VM_LOADER_MIGRATION_SCRIPT:-${ROOT}/scripts/migrate_vm_to_bhyveload.sh}"
@@ -21,9 +24,12 @@ FREEBSD_JAIL_PROFILE="${FREEBSD_JAIL_PROFILE:-${ROOT}/config/cloud-init/freebsd-
 . "${ROOT}/scripts/lib.sh"
 
 [ -r "$KEA_DB_INIT_SCRIPT" ] || die "missing Kea hosts database initializer"
+[ -r "$POSTGRES_INIT_SCRIPT" ] || die "missing PostgreSQL initializer"
+[ -r "$MAC_ALLOCATOR_SQL" ] || die "missing transactional MAC allocator"
 [ -r "$DEPENDENCY_SCRIPT" ] || die "missing dependency installer"
 [ -r "$PROVISION_SCRIPT" ] || die "missing VM provisioner"
 [ -r "$ROLLBACK_SCRIPT" ] || die "missing VM rollback script"
+[ -r "$FETCH_IMAGE_SCRIPT" ] || die "missing cloud image verifier"
 [ -r "$DEPROVISION_SCRIPT" ] || die "missing VM deprovision script"
 [ -r "$VM_TEMPLATE" ] || die "missing vm-bhyve template"
 [ -r "$VM_LOADER_MIGRATION_SCRIPT" ] || die "missing VM loader migration script"
@@ -47,10 +53,31 @@ grep -Eq 'reinstall clean' "$DEPENDENCY_SCRIPT" || \
     die "dependency installer does not replace the binary Kea package"
 grep -Eq 'kea-admin db-init pgsql' "$KEA_DB_INIT_SCRIPT" || \
     die "Kea hosts database initializer does not create a PostgreSQL schema"
+grep -Eq 'db/003_mac_allocator.sql' "$POSTGRES_INIT_SCRIPT" || \
+    die "PostgreSQL initialization does not apply the MAC allocator"
+grep -Eq 'pg_advisory_xact_lock' "$MAC_ALLOCATOR_SQL" || \
+    die "MAC allocation is not serialized transactionally"
+grep -Eq 'status <> .archived.' "$MAC_ALLOCATOR_SQL" || \
+    die "MAC allocator does not exclude active collisions"
+grep -Eq 'allocate_mac' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not use the transactional MAC allocator"
 grep -Eq 'command:"reservation-add"' "$PROVISION_SCRIPT" || \
     die "VM provisioner does not use Kea reservation-add"
+grep -Eq '"operation-target":"database"' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not target the PostgreSQL Kea hosts backend"
 grep -Eq 'command:"reservation-del"' "$ROLLBACK_SCRIPT" || \
     die "VM rollback does not use Kea reservation-del"
+grep -Eq '"operation-target":"database"' "$ROLLBACK_SCRIPT" || \
+    die "VM rollback does not target the PostgreSQL Kea hosts backend"
+if grep -Eq 'kea-dhcp4\.conf.*reservations|cat .*kea-dhcp4\.conf' "$PROVISION_SCRIPT" "$ROLLBACK_SCRIPT"; then
+    die "runtime provisioning must not mutate static Kea reservations"
+fi
+grep -Eq 'fetch_freebsd_cloud_image.sh|FETCH_IMAGE_SCRIPT' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not require verified cloud images"
+grep -Eq 'SHA-256 mismatch' "$FETCH_IMAGE_SCRIPT" || \
+    die "cloud image fetcher does not reject checksum mismatches"
+grep -Eq '\.verified' "$FETCH_IMAGE_SCRIPT" || \
+    die "cloud image cache has no verification marker"
 grep -Eq "status <> 'archived'" "$PROVISION_SCRIPT" || \
     die "VM provisioner does not reject an active inventory name"
 preflight_line=$(grep -n 'active_vm=.*psql' "$PROVISION_SCRIPT" | sed -n '1s/:.*//p')
@@ -61,8 +88,8 @@ grep -Eq 'delete_result.*-eq 3' "$ROLLBACK_SCRIPT" || \
     die "VM rollback does not tolerate an already-absent Kea reservation"
 grep -Eq 'if vm info "\$VM_NAME"' "$ROLLBACK_SCRIPT" || \
     die "VM rollback does not tolerate an already-absent vm-bhyve guest"
-grep -Eq 'RETURNING uuid, ip_address, pool_id, vlan' "$PROVISION_SCRIPT" || \
-    die "VM provisioner does not retain the inserted inventory UUID"
+grep -Eq 'RETURNING uuid, ip_address, pool_id, vlan, mac_address' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not retain the allocated inventory identity"
 grep -Eq "DELETE FROM vms WHERE uuid = .*VM_UUID.*::uuid" "$PROVISION_SCRIPT" || \
     die "VM provisioning compensation is not scoped to the inserted inventory UUID"
 grep -Eq "WHERE uuid = .*VM_UUID.*::uuid" "$PROVISION_SCRIPT" || \
@@ -118,24 +145,24 @@ for mock_command in curl jq mktemp sysrc zfs; do
     printf '#!/bin/sh\nexit 99\n' > "${mock_bin}/${mock_command}"
     chmod +x "${mock_bin}/${mock_command}"
 done
-cat > "${mock_bin}/id" <<'EOF'
+cat > "${mock_bin}/id" <<'EOF_ID'
 #!/bin/sh
 [ "${1:-}" = "-u" ] && {
     printf '0\n'
     exit 0
 }
 exit 99
-EOF
-cat > "${mock_bin}/psql" <<'EOF'
+EOF_ID
+cat > "${mock_bin}/psql" <<'EOF_PSQL'
 #!/bin/sh
-printf '%s\n' 'running|10.0.20.10|58:9c:fc:0b:cb:64|zroot/vm/db-node-01'
-EOF
-cat > "${mock_bin}/vm" <<'EOF'
+printf '%s\n' 'running|10.0.20.10|02:00:00:00:00:10|zroot/vm/db-node-01'
+EOF_PSQL
+cat > "${mock_bin}/vm" <<'EOF_VM'
 #!/bin/sh
 [ "$#" -gt 0 ] && printf '%s\n' "$*" >> "$VM_CALL_LOG"
 [ "${1:-}" = "info" ] && exit 1
 exit 99
-EOF
+EOF_VM
 chmod +x "${mock_bin}/id" "${mock_bin}/psql" "${mock_bin}/vm"
 
 if PATH="${mock_bin}:${PATH}" \
@@ -175,7 +202,7 @@ if command -v jq >/dev/null 2>&1; then
     printf '%s\n' test-only-password > "$password_file"
 
     jq '.Dhcp4.subnet4[0].reservations = [{
-        "hw-address": "58:9c:fc:0b:cb:64",
+        "hw-address": "02:00:00:00:00:10",
         "ip-address": "10.0.20.10",
         "hostname": "db-node-01"
     }]' "$DHCP4_CONF" > "$existing_conf"
@@ -199,13 +226,10 @@ if command -v jq >/dev/null 2>&1; then
             "port": 5432
         }]
         and (.Dhcp4["hooks-libraries"] | map(.library) | index("/usr/local/lib/kea/hooks/libdhcp_pgsql.so")) != null
-        and .Dhcp4.subnet4[0].reservations == [{
-            "hw-address": "58:9c:fc:0b:cb:64",
-            "ip-address": "10.0.20.10",
-            "hostname": "db-node-01"
-        }]
+        and (.Dhcp4["hooks-libraries"] | map(.library) | index("/usr/local/lib/kea/hooks/libdhcp_lease_cmds.so")) != null
+        and .Dhcp4.subnet4[0].reservations == []
     ' "$rendered_conf" >/dev/null || \
-        die "rendering a Kea configuration did not preserve VM reservations"
+        die "PostgreSQL-backed rendering did not remove static reservation state"
 
     rm -rf "$test_dir"
     trap - EXIT HUP INT TERM

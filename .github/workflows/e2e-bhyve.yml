@@ -33,6 +33,7 @@ jobs:
       IPAM_POOL: vm-lan
       VM_OWNER: github-actions
       CLOUD_INIT_USER: gha
+      CONTROL_PLANE_ID: github-bare-metal-e2e
       SSH_PUBLIC_KEY_FILE: /var/run/freebsd-bhyve-kea-e2e/id_ed25519.pub
 
     steps:
@@ -79,10 +80,17 @@ jobs:
           mac=$(printf '%s' "$row" | cut -d'|' -f3)
           test "$status" = running
 
+          kea_user=$(sed -n '1p' /usr/local/etc/kea/kea-api-user)
+          kea_password=$(sed -n '1p' /usr/local/etc/kea/kea-api-password)
+          test -n "$kea_user"
+          test -n "$kea_password"
+
           payload=$(jq -n \
             --arg mac "$mac" \
-            '{command:"reservation-get",service:["dhcp4"],arguments:{"subnet-id":1,"identifier-type":"hw-address",identifier:$mac}}')
-          response=$(curl -fsS -H 'Content-Type: application/json' \
+            '{command:"reservation-get",service:["dhcp4"],arguments:{"operation-target":"database","subnet-id":1,"identifier-type":"hw-address",identifier:$mac}}')
+          response=$(curl -fsS \
+            --user "${kea_user}:${kea_password}" \
+            -H 'Content-Type: application/json' \
             -d "$payload" http://127.0.0.1:8000/)
           printf '%s' "$response" | jq -e --arg ip "$ip" \
             '.[0].result == 0 and .[0].arguments."ip-address" == $ip'
