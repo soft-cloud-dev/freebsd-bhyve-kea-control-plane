@@ -93,10 +93,10 @@ sudo make cluster-up \
 By default, kubeconfig is fetched from:
 
 ```text
-root@ipa.softcloud.dev:/etc/kubernetes/admin.conf
+fedora@ipa.softcloud.dev:/etc/kubernetes/admin.conf via sudo -n cat
 ```
 
-It is installed atomically at `/root/.kube/config` and verified with `kubectl cluster-info`. Override `KUBECONFIG_REMOTE_HOST`, `KUBECONFIG_REMOTE_USER`, `KUBECONFIG_REMOTE_PATH`, or `KUBECONFIG_REMOTE_SSH_KEY` when needed. A local `KUBECONFIG_SOURCE` still takes precedence.
+It is installed atomically at `/root/.kube/config` and verified with `kubectl cluster-info`. Override `KUBECONFIG_REMOTE_HOST`, `KUBECONFIG_REMOTE_USER`, `KUBECONFIG_REMOTE_PATH`, `KUBECONFIG_REMOTE_SUDO`, or `KUBECONFIG_REMOTE_SSH_KEY` when needed. A local `KUBECONFIG_SOURCE` still takes precedence.
 
 Bootstrap or refresh only kubectl access:
 
