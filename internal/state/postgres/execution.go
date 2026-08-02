@@ -38,6 +38,9 @@ func (r *Repository) PrepareExecutableApply(ctx context.Context, site config.Sit
 		return state.PreparedApply{}, fmt.Errorf("begin executable apply: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockExecutionPreparation(ctx, tx, normalized.Name); err != nil {
+		return state.PreparedApply{}, err
+	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, resourceLockKey(site.ControlPlaneID, normalized.Name)); err != nil {
 		return state.PreparedApply{}, fmt.Errorf("lock resource: %w", err)
 	}
@@ -83,6 +86,9 @@ func (r *Repository) PrepareExecutableDelete(ctx context.Context, site config.Si
 		return state.PreparedApply{}, fmt.Errorf("begin delete preparation: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockExecutionPreparation(ctx, tx, name); err != nil {
+		return state.PreparedApply{}, err
+	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, resourceLockKey(site.ControlPlaneID, name)); err != nil {
 		return state.PreparedApply{}, fmt.Errorf("lock resource: %w", err)
 	}

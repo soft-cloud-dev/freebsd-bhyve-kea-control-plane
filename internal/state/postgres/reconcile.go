@@ -18,6 +18,9 @@ func (r *Repository) PrepareExecutableReconcile(ctx context.Context, site config
 		return state.PreparedApply{}, fmt.Errorf("begin reconcile preparation: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockExecutionPreparation(ctx, tx, name); err != nil {
+		return state.PreparedApply{}, err
+	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, resourceLockKey(site.ControlPlaneID, name)); err != nil {
 		return state.PreparedApply{}, fmt.Errorf("lock resource: %w", err)
 	}
