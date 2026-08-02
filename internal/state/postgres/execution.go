@@ -362,8 +362,13 @@ func (r *Repository) RecordObservation(ctx context.Context, observation state.Ob
 	}
 	var uuid string
 	return r.pool.QueryRow(ctx, `
-INSERT INTO bkcp.vm_observations(resource_uuid,observer_version,vm_state,storage_state,kea_state,seed_state,power_state,observed,error_code,error_detail,plan_digest)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,'')) RETURNING uuid::text`, observation.ResourceUUID, observation.ObserverVersion, observation.VMState, observation.StorageState, observation.KeaState, observation.SeedState, observation.PowerState, observed, nullString(observation.ErrorCode), nullString(observation.ErrorDetail), observation.PlanDigest).Scan(&uuid)
+INSERT INTO bkcp.vm_observations(resource_uuid,observer_version,vm_state,storage_state,kea_state,seed_state,image_state,pf_state,power_state,observed,error_code,error_detail,plan_digest)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')) RETURNING uuid::text`,
+		observation.ResourceUUID, observation.ObserverVersion,
+		observation.VMState, observation.StorageState, observation.KeaState, observation.SeedState,
+		observation.ImageState, observation.PFState, observation.PowerState, observed,
+		nullString(observation.ErrorCode), nullString(observation.ErrorDetail), observation.PlanDigest,
+	).Scan(&uuid)
 }
 
 func loadAllocationTx(ctx context.Context, tx pgx.Tx, resourceUUID string) (state.Allocation, error) {

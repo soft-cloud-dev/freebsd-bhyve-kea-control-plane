@@ -238,14 +238,15 @@ FROM bkcp.vm_allocations WHERE resource_uuid = $1`, out.Resource.UUID).Scan(
 	var observedJSON []byte
 	if err := r.pool.QueryRow(ctx, `
 SELECT uuid::text, resource_uuid::text, collected_at, observer_version,
-       vm_state, storage_state, kea_state, seed_state, power_state, observed,
+       vm_state, storage_state, kea_state, seed_state, image_state, pf_state, power_state, observed,
        COALESCE(error_code, ''), COALESCE(error_detail, ''), COALESCE(plan_digest, '')
 FROM bkcp.vm_observations
 WHERE resource_uuid = $1
 ORDER BY collected_at DESC, uuid DESC
 LIMIT 1`, out.Resource.UUID).Scan(
 		&observation.UUID, &observation.ResourceUUID, &observation.CollectedAt, &observation.ObserverVersion,
-		&observation.VMState, &observation.StorageState, &observation.KeaState, &observation.SeedState, &observation.PowerState,
+		&observation.VMState, &observation.StorageState, &observation.KeaState, &observation.SeedState,
+		&observation.ImageState, &observation.PFState, &observation.PowerState,
 		&observedJSON, &observation.ErrorCode, &observation.ErrorDetail, &observation.PlanDigest,
 	); err == nil {
 		if err := json.Unmarshal(observedJSON, &observation.Observed); err != nil {
