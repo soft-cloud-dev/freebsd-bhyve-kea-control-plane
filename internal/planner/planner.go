@@ -12,9 +12,10 @@ import (
 const PlanSchemaVersion = 1
 
 type Step struct {
-	Sequence int    `json:"sequence"`
-	Driver   string `json:"driver"`
-	Action   string `json:"action"`
+	Sequence    int    `json:"sequence"`
+	Driver      string `json:"driver"`
+	Action      string `json:"action"`
+	InputDigest string `json:"input_digest"`
 }
 
 type Plan struct {
@@ -54,23 +55,16 @@ func BuildApply(controlPlaneID string, generation uint64, manifest config.VMMani
 		return Plan{}, fmt.Errorf("digest manifest: %w", err)
 	}
 	steps := []Step{
-		{Sequence: 1, Driver: "image", Action: "ensure-verified"},
-		{Sequence: 2, Driver: "vmbhyve", Action: "ensure-definition"},
-		{Sequence: 3, Driver: "zfs", Action: "ensure-storage"},
-		{Sequence: 4, Driver: "vmbhyve", Action: "ensure-config"},
-		{Sequence: 5, Driver: "cloudinit", Action: "ensure-seed"},
-		{Sequence: 6, Driver: "kea", Action: "ensure-reservation"},
-		{Sequence: 7, Driver: "vmbhyve", Action: "ensure-power-state"},
-		{Sequence: 8, Driver: "observer", Action: "observe-all"},
+		newStep(1, "image", "ensure-verified", specDigest),
+		newStep(2, "vmbhyve", "ensure-definition", specDigest),
+		newStep(3, "zfs", "ensure-storage", specDigest),
+		newStep(4, "vmbhyve", "ensure-config", specDigest),
+		newStep(5, "cloudinit", "ensure-seed", specDigest),
+		newStep(6, "kea", "ensure-reservation", specDigest),
+		newStep(7, "vmbhyve", "ensure-power-state", specDigest),
+		newStep(8, "observer", "observe-all", specDigest),
 	}
-	input := digestInput{
-		Schema:        PlanSchemaVersion,
-		Action:        "apply",
-		Resource:      normalized.Name,
-		Generation:    generation,
-		Specification: normalized,
-		Steps:         steps,
-	}
+	input := digestInput{Schema: PlanSchemaVersion, Action: "apply", Resource: normalized.Name, Generation: generation, Specification: normalized, Steps: steps}
 	canonical, err := json.Marshal(input)
 	if err != nil {
 		return Plan{}, fmt.Errorf("marshal plan input: %w", err)
@@ -79,15 +73,11 @@ func BuildApply(controlPlaneID string, generation uint64, manifest config.VMMani
 	planDigest := hex.EncodeToString(planHash[:])
 	keyInput := fmt.Sprintf("%s\n%s\n%d\napply\n%s", controlPlaneID, normalized.Name, generation, planDigest)
 	keyHash := sha256.Sum256([]byte(keyInput))
-	return Plan{
-		Schema:         PlanSchemaVersion,
-		Action:         "apply",
-		Resource:       normalized.Name,
-		Generation:     generation,
-		Specification:  normalized,
-		SpecDigest:     specDigest,
-		PlanDigest:     planDigest,
-		IdempotencyKey: hex.EncodeToString(keyHash[:]),
-		Steps:          steps,
-	}, nil
+	return Plan{Schema: PlanSchemaVersion, Action: "apply", Resource: normalized.Name, Generation: generation, Specification: normalized, SpecDigest: specDigest, PlanDigest: planDigest, IdempotencyKey: hex.EncodeToString(keyHash[:]), Steps: steps}, nil
+}
+
+func newStep(sequence int, driver, action, specDigest string) Step {
+	input := fmt.Sprintf("%d\n%s\n%s\n%s", sequence, driver, action, specDigest)
+	digest := sha256.Sum256([]byte(input))
+	return Step{Sequence: sequence, Driver: driver, Action: action, InputDigest: hex.EncodeToString(digest[:])}
 }

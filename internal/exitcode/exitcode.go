@@ -7,5 +7,6 @@ const (
 	DriftDetected         = 4
 	BlockedOperation      = 5
 	PartialFailure        = 6
+	NotFound              = 7
 	InternalError         = 70
 )

@@ -18,4 +18,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Verify module graph
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - run: make verify
