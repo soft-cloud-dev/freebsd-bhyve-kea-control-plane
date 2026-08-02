@@ -1,104 +1,91 @@
 # Development and Testing
 
-## Local workflow
+## Local verification
 
 ```sh
 make verify
 make build
 ```
 
-`make verify` runs the portable gate:
-
-- formatting verification;
-- `go vet ./...`;
-- race-enabled unit tests;
-- binary build;
-- checked-in configuration example validation.
-
-The generated binary is `bin/cpctl`.
+`make verify` checks formatting, runs `go vet`, executes race-enabled unit tests, builds `bin/cpctl`, and validates checked-in configuration examples.
 
 ## PostgreSQL integration tests
-
-Set a PostgreSQL 16 test DSN:
 
 ```sh
 export BKCP_TEST_DATABASE_URL='postgres://bkcp:bkcp@127.0.0.1:5432/bkcp?sslmode=disable'
 make integration
 ```
 
-Equivalent direct command:
+Equivalent command:
 
 ```sh
 go test -race -tags=integration ./internal/state/postgres/...
 ```
 
-The integration suite covers:
+The integration suite covers migration repetition, generation semantics, operation and step persistence, resume-point inspection, rollback, and convergence of concurrent identical preparations.
 
-- applying migrations to an empty database;
-- migration repetition;
-- generation retention for identical normalized intent;
-- generation advancement for changed intent;
-- operation and ordered-step persistence;
-- resume-point inspection;
-- convergence of 32 concurrent identical `PrepareApply` calls.
-
-## Module reproducibility
-
-CI verifies that the committed module graph is already normalized:
+## Dependency reproducibility
 
 ```sh
 go mod tidy
 git diff --exit-code -- go.mod go.sum
 ```
 
-Dependency changes must commit both `go.mod` and `go.sum` updates.
+Commit both files for dependency changes.
 
-## Test design rules
-
-- Keep portable tests independent of Docker and PostgreSQL.
-- Put live PostgreSQL tests behind the `integration` build tag.
-- Use the race detector for state and concurrency paths.
-- Test deterministic output by repeating identical inputs.
-- Test changed inputs by asserting changed digests or generations.
-- Test unknown and unavailable observations separately from absence.
-- Test rollback paths so no partial resource/specification/operation graph remains.
-
-## Migration development
+## Migration rules
 
 Applied migrations are immutable.
 
-To change the schema:
+1. Never edit an applied migration.
+2. Add the next numbered migration.
+3. Test both empty and previously migrated databases.
+4. Test concurrent migration calls.
+5. Confirm that legacy `public` objects remain untouched.
 
-1. leave existing migration files byte-for-byte unchanged;
-2. create the next monotonically numbered SQL migration;
-3. update embedded migration discovery if required;
-4. test an empty database and an already migrated database;
-5. test concurrent migration calls;
-6. verify that V1 `public` objects are untouched.
+## State and planning rules
 
-## Pull-request boundary
+- Repeat identical inputs and assert identical digests and plans.
+- Assert changed generations or digests for changed normalized intent.
+- Keep portable tests independent of PostgreSQL and FreeBSD.
+- Put live PostgreSQL tests behind the `integration` tag.
+- Use the race detector on state and concurrency paths.
+- Distinguish unavailable, unknown, present, and absent evidence.
+- Test rollback so no partial resource, specification, operation, or step graph remains.
 
-Keep each iteration reviewable. Do not mix unrelated infrastructure drivers into state or documentation changes.
+## Security rules
 
-Before merging:
+- Never commit or log passwords, private keys, tokens, credential contents, or complete DSNs.
+- Persist only typed, bounded operation inputs and errors.
+- Do not introduce arbitrary root shell execution.
+- Keep future privileged drivers narrow and postcondition-driven.
+- Do not load PF outside the configured anchor.
+- Do not promote an image before digest verification.
+- Do not mark journal steps successful without verifying authoritative external state.
+
+## Pull-request checklist
+
+Before merge:
 
 ```sh
 make verify
 make integration
 ```
 
-Review the diff for:
+Review for:
 
 - accidental V1 restoration;
-- secrets or credential contents;
-- migration edits instead of new migration versions;
-- nondeterministic map or query ordering;
+- migration edits instead of new versions;
+- nondeterministic map, query, or step ordering;
 - inference of absence from unavailable evidence;
-- external mutation before journal persistence.
+- external mutation before journal persistence;
+- credentials in code, configuration, logs, fixtures, or errors;
+- unrelated driver work mixed into the iteration.
 
-## CI workflows
+## CI
 
-- `V2 CI` runs the portable verification gate.
-- `V2 PostgreSQL` starts PostgreSQL 16 and runs the race-enabled integration suite.
+- `V2 CI` runs portable verification.
+- `V2 PostgreSQL` runs PostgreSQL 16 integration tests with the race detector.
+- `Publish GitHub Wiki` synchronizes `wiki/*.md` to the native Wiki after it is initialized.
 
-A future FreeBSD execution workflow should remain separate because Linux CI cannot validate `vm-bhyve`, ZFS, PF, or FreeBSD service semantics.
+Future FreeBSD execution tests must remain separate because Linux CI cannot validate `vm-bhyve`, ZFS, PF, or FreeBSD service semantics.
