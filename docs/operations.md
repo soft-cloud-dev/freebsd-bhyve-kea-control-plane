@@ -142,7 +142,7 @@ curl -fsS \
   http://127.0.0.1:8000/ | jq .
 ```
 
-Do not place the password directly in shell history. The command substitution above keeps it out of the command line, but it is still present in the process environment of the shell and in memory while the request runs.
+Do not hard-code the password in scripts or shell history. `curl --user` receives the expanded credential in its local process arguments, so run this diagnostic only on the trusted loopback host. Use a protected curl configuration file or another credential helper when local process inspection is part of the threat model.
 
 ## Service management
 
