@@ -14,6 +14,8 @@ CLOUD_INIT_EXTRA_FILE="${CLOUD_INIT_EXTRA_FILE:-}"
 IPAM_POOL="${IPAM_POOL:-vm-lan}"
 VM_DATASET="${VM_DATASET:-zroot/vm}"
 VM_ROOT="${VM_ROOT:-}"
+FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL:-https://download.freebsd.org/releases/VM-IMAGES/14.3-RELEASE/amd64/Latest/FreeBSD-14.3-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz}"
+FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE:-/var/cache/control-plane/freebsd-cloud.raw}"
 
 usage() {
     cat >&2 <<EOF
@@ -215,6 +217,29 @@ if [ "$created_loader" != "bhyveload" ]; then
 fi
 [ "$(sysrc -f "$VM_CONFIG" -n loader)" = "bhyveload" ] || \
     die "could not enforce bhyveload in $VM_CONFIG"
+
+zvol_dev="/dev/zvol/${VM_DATASET}/${VM_NAME}/disk0"
+if [ -c "$zvol_dev" ] || [ -b "$zvol_dev" ]; then
+    if [ ! -f "$FREEBSD_CLOUD_IMAGE_CACHE" ]; then
+        if [ -f "/tmp/freebsd-cloud.raw" ]; then
+            FREEBSD_CLOUD_IMAGE_CACHE="/tmp/freebsd-cloud.raw"
+        else
+            echo " - caching FreeBSD cloud image..."
+            mkdir -p "$(dirname "$FREEBSD_CLOUD_IMAGE_CACHE")" 2>/dev/null || true
+            tmp_xz="${FREEBSD_CLOUD_IMAGE_CACHE}.xz"
+            if command -v curl >/dev/null 2>&1; then
+                curl -fsSL -o "$tmp_xz" "$FREEBSD_CLOUD_IMAGE_URL"
+            elif command -v fetch >/dev/null 2>&1; then
+                fetch -o "$tmp_xz" "$FREEBSD_CLOUD_IMAGE_URL"
+            else
+                die "neither curl nor fetch is available to download cloud image"
+            fi
+            unxz -f "$tmp_xz"
+        fi
+    fi
+    echo " - writing FreeBSD cloud image to $zvol_dev"
+    dd if="$FREEBSD_CLOUD_IMAGE_CACHE" of="$zvol_dev" bs=1M status=none
+fi
 
 echo "[2/7] Reading VM MAC address"
 MAC_ADDRESS=$(vm info "$VM_NAME" | awk '
