@@ -23,6 +23,7 @@ type Host struct {
 	ExternalInterface   string `json:"external_interface"`
 	ManagementInterface string `json:"management_interface"`
 	VMBridge            string `json:"vm_bridge"`
+	VMSwitch            string `json:"vm_switch"`
 	VMDataset           string `json:"vm_dataset"`
 	VMRoot              string `json:"vm_root"`
 }
@@ -95,7 +96,7 @@ func decodeSite(doc map[string]any) (Site, error) {
 	if err != nil {
 		return Site{}, err
 	}
-	if err := rejectUnknown(host, "external_interface", "management_interface", "vm_bridge", "vm_dataset", "vm_root"); err != nil {
+	if err := rejectUnknown(host, "external_interface", "management_interface", "vm_bridge", "vm_switch", "vm_dataset", "vm_root"); err != nil {
 		return Site{}, fmt.Errorf("host: %w", err)
 	}
 	if site.Host.ExternalInterface, err = requiredString(host, "external_interface"); err != nil {
@@ -106,6 +107,12 @@ func decodeSite(doc map[string]any) (Site, error) {
 	}
 	if site.Host.VMBridge, err = requiredString(host, "vm_bridge"); err != nil {
 		return Site{}, err
+	}
+	if site.Host.VMSwitch, err = optionalString(host, "vm_switch"); err != nil {
+		return Site{}, err
+	}
+	if site.Host.VMSwitch == "" {
+		site.Host.VMSwitch = site.Host.VMBridge
 	}
 	if site.Host.VMDataset, err = requiredString(host, "vm_dataset"); err != nil {
 		return Site{}, err
