@@ -37,9 +37,12 @@ Stop at `plan`.
 ## Documentation
 
 1. [Getting Started](Getting-Started)
-2. [Architecture](Architecture)
-3. [CLI and Operations](CLI-and-Operations)
-4. [Development and Roadmap](Development-and-Roadmap)
+2. [Bare-Metal Three-Node Bootstrap](Bare-Metal-Three-Node-Bootstrap)
+3. [Architecture](Architecture)
+4. [CLI and Operations](CLI-and-Operations)
+5. [Development and Roadmap](Development-and-Roadmap)
+
+The bare-metal runbook uses the frozen `legacy/v1-shell` implementation for host and VM mutation, then installs V2 alongside it for validation, state migrations, and deterministic planning. It does not treat V1-created guests as V2-managed resources.
 
 ## Fixed rules
 
