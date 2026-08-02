@@ -1,0 +1,82 @@
+#!/bin/sh
+#
+# PROVIDE: bkcp_alloy
+# REQUIRE: NETWORKING postgresql bkcp_metrics
+# KEYWORD: shutdown
+#
+# Add the following to /etc/rc.conf:
+#
+# bkcp_alloy_enable="YES"
+# bkcp_alloy_user="alloy"
+# bkcp_alloy_group="alloy"
+# bkcp_alloy_binary="/usr/local/bin/alloy"
+# bkcp_alloy_config="/usr/local/etc/alloy/config.alloy"
+# bkcp_alloy_env_file="/usr/local/etc/alloy/grafana-cloud.env"
+# bkcp_alloy_dsn_file="/usr/local/etc/alloy/postgres.dsn"
+
+. /etc/rc.subr
+
+name="bkcp_alloy"
+rcvar="bkcp_alloy_enable"
+desc="Grafana Alloy for BKCP PostgreSQL Database Observability"
+
+load_rc_config "$name"
+
+: ${bkcp_alloy_enable:="NO"}
+: ${bkcp_alloy_user:="alloy"}
+: ${bkcp_alloy_group:="alloy"}
+: ${bkcp_alloy_binary:="/usr/local/bin/alloy"}
+: ${bkcp_alloy_config:="/usr/local/etc/alloy/config.alloy"}
+: ${bkcp_alloy_env_file:="/usr/local/etc/alloy/grafana-cloud.env"}
+: ${bkcp_alloy_dsn_file:="/usr/local/etc/alloy/postgres.dsn"}
+: ${bkcp_alloy_storage:="/var/db/alloy"}
+: ${bkcp_alloy_http_listen:="127.0.0.1:12345"}
+: ${bkcp_alloy_pidfile:="/var/run/bkcp_alloy.pid"}
+: ${bkcp_alloy_logfile:="/var/log/bkcp_alloy.log"}
+: ${bkcp_alloy_disable_reporting:="YES"}
+
+required_files="${bkcp_alloy_config} ${bkcp_alloy_env_file} ${bkcp_alloy_dsn_file}"
+pidfile="${bkcp_alloy_pidfile}"
+command="/usr/sbin/daemon"
+start_precmd="${name}_precmd"
+
+bkcp_alloy_precmd()
+{
+	if [ ! -x "${bkcp_alloy_binary}" ]; then
+		err 1 "${bkcp_alloy_binary} is not executable"
+	fi
+
+	install -d -m 0750 -o "${bkcp_alloy_user}" -g "${bkcp_alloy_group}" \
+		"${bkcp_alloy_storage}"
+
+	set -a
+	. "${bkcp_alloy_env_file}"
+	set +a
+
+	for variable in \
+		BKCP_DB_INSTANCE \
+		GCLOUD_HOSTED_METRICS_URL \
+		GCLOUD_HOSTED_METRICS_ID \
+		GCLOUD_HOSTED_LOGS_URL \
+		GCLOUD_HOSTED_LOGS_ID \
+		GCLOUD_RW_API_KEY
+	do
+		eval "value=\${${variable}:-}"
+		if [ -z "${value}" ]; then
+			err 1 "${variable} is required in ${bkcp_alloy_env_file}"
+		fi
+	done
+}
+
+reporting_arg=""
+if checkyesno bkcp_alloy_disable_reporting; then
+	reporting_arg="--disable-reporting"
+fi
+
+command_args="-f -p ${pidfile} -u ${bkcp_alloy_user} -o ${bkcp_alloy_logfile} \
+${bkcp_alloy_binary} run ${reporting_arg} \
+--server.http.listen-addr=${bkcp_alloy_http_listen} \
+--storage.path=${bkcp_alloy_storage} \
+${bkcp_alloy_config}"
+
+run_rc_command "$1"
