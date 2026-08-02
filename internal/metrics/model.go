@@ -11,12 +11,11 @@ type Source interface {
 }
 
 type Snapshot struct {
-	CollectedAt       time.Time
-	Resources         []Resource
-	OperationCounts   []OperationCount
-	StepCounts        []StepCount
-	AllocationCounts  map[string]int64
-	ActiveAllocations int64
+	CollectedAt      time.Time
+	Resources        []Resource
+	OperationCounts  []OperationCount
+	StepCounts       []StepCount
+	AllocationCounts []AllocationCount
 }
 
 type Resource struct {
@@ -46,4 +45,10 @@ type StepCount struct {
 	Action string
 	Status string
 	Count  int64
+}
+
+type AllocationCount struct {
+	Pool  string
+	State string
+	Count int64
 }
