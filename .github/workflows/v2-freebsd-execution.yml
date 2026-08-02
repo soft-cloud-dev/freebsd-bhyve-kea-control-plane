@@ -1,0 +1,93 @@
+name: V2 FreeBSD Execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: Absolute V2 site configuration path on the runner
+        required: true
+        default: /usr/local/etc/bkcp/site.toml
+        type: string
+      manifest_path:
+        description: Absolute disposable VM manifest path on the runner
+        required: true
+        default: /usr/local/etc/bkcp/execution-smoke.toml
+        type: string
+      delete_after:
+        description: Delete the disposable VM and its storage after validation
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-freebsd-execution
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    environment: freebsd-execution
+    runs-on: [self-hosted, freebsd, bkcp]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and verify
+        shell: sh
+        run: |
+          set -eu
+          make verify
+          make build
+
+      - name: Validate host and migrate state
+        shell: sh
+        env:
+          CONFIG_PATH: ${{ inputs.config_path }}
+        run: |
+          set -eu
+          test -r "${CONFIG_PATH}"
+          bin/cpctl doctor --config "${CONFIG_PATH}"
+          bin/cpctl migrate --config "${CONFIG_PATH}" --dry-run --json
+          bin/cpctl migrate --config "${CONFIG_PATH}"
+
+      - name: Apply disposable VM
+        shell: sh
+        env:
+          CONFIG_PATH: ${{ inputs.config_path }}
+          MANIFEST_PATH: ${{ inputs.manifest_path }}
+        run: |
+          set -eu
+          test -r "${MANIFEST_PATH}"
+          bin/cpctl apply \
+            --config "${CONFIG_PATH}" \
+            --file "${MANIFEST_PATH}" \
+            --json | tee /tmp/bkcp-apply.json
+
+      - name: Reconcile and inspect
+        shell: sh
+        env:
+          CONFIG_PATH: ${{ inputs.config_path }}
+          MANIFEST_PATH: ${{ inputs.manifest_path }}
+        run: |
+          set -eu
+          RESOURCE=$(awk -F ' *= *' '$1 == "name" {gsub(/"/, "", $2); print $2; exit}' "${MANIFEST_PATH}")
+          test -n "${RESOURCE}"
+          bin/cpctl reconcile "${RESOURCE}" --config "${CONFIG_PATH}" --json | tee /tmp/bkcp-reconcile.json
+          bin/cpctl inspect "${RESOURCE}" --config "${CONFIG_PATH}" --json | tee /tmp/bkcp-inspect.json
+
+      - name: Delete disposable VM
+        if: ${{ inputs.delete_after }}
+        shell: sh
+        env:
+          CONFIG_PATH: ${{ inputs.config_path }}
+          MANIFEST_PATH: ${{ inputs.manifest_path }}
+        run: |
+          set -eu
+          RESOURCE=$(awk -F ' *= *' '$1 == "name" {gsub(/"/, "", $2); print $2; exit}' "${MANIFEST_PATH}")
+          test -n "${RESOURCE}"
+          bin/cpctl delete "${RESOURCE}" \
+            --config "${CONFIG_PATH}" \
+            --destroy-storage \
+            --json | tee /tmp/bkcp-delete.json
