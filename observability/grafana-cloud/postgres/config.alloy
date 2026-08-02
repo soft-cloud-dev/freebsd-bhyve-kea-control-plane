@@ -39,9 +39,9 @@ database_observability.postgres "postgres_bkcp" {
   forward_to       = [loki.relabel.database_observability_postgres_bkcp.receiver]
   targets          = prometheus.exporter.postgres.postgres_bkcp.targets
 
-  enable_collectors  = ["query_details", "query_samples", "schema_details", "explain_plans"]
-  disable_collectors = ["logs"]
-  exclude_users      = ["db-o11y"]
+  enable_collectors    = ["query_details", "query_samples", "schema_details", "explain_plans"]
+  disable_collectors   = ["logs"]
+  exclude_users        = ["db-o11y"]
   exclude_current_user = true
 
   query_samples {
@@ -55,6 +55,12 @@ loki.relabel "database_observability_postgres_bkcp" {
   rule {
     target_label = "job"
     replacement  = "integrations/db-o11y"
+  }
+
+  // Preserve the original exporter target for Database Observability correlation.
+  rule {
+    source_labels = ["instance"]
+    target_label  = "dsn"
   }
 
   rule {
@@ -71,7 +77,7 @@ discovery.relabel "database_observability_postgres_bkcp" {
     replacement  = "integrations/db-o11y"
   }
 
-  // Database Observability uses the original target identity for correlation.
+  // Preserve the original exporter target for Database Observability correlation.
   rule {
     source_labels = ["instance"]
     target_label  = "dsn"
