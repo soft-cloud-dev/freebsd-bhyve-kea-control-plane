@@ -48,7 +48,7 @@ cmd/cpctl/          CLI entry point
 internal/           Configuration, planning, probes, output contracts
 config/             V2 site and VM examples
 schemas/            Versioned JSON schemas
- docs/               Architecture, migration, and legacy policy
+docs/               Architecture, migration, and legacy policy
 ```
 
 ## Design invariants
