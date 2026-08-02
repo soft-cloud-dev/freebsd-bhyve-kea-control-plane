@@ -1,22 +1,23 @@
 # FreeBSD bhyve + Kea Control Plane
 
-`cpctl` is the V2 control plane for FreeBSD `vm-bhyve` guests, ZFS-backed storage, Kea reservations, and durable PostgreSQL state.
+`cpctl` is the V2 control plane for FreeBSD `vm-bhyve` guests, ZFS storage, Kea reservations, PF isolation, cloud-init media, and durable PostgreSQL state.
 
-V2 is currently **stateful but non-executing**.
+V2 executes new VM lifecycles directly. It does not require `legacy/v1-shell`.
 
 ## Available now
 
 - strict site and VM TOML validation;
-- offline and live dependency checks;
-- deterministic plans, step digests, and idempotency keys;
+- deterministic pure plans and allocation-bound execution plans;
 - checksummed PostgreSQL migrations;
 - separate declared, allocated, observed, and effective state;
-- durable operation and ordered-step journals;
-- `doctor`, `plan`, `migrate`, `status`, and `inspect`.
+- durable IP, MAC, dataset, zvol, Kea subnet, and image allocations;
+- exact persisted step inputs and verified postconditions;
+- typed image, ZFS, cloud-init, Kea, PF, and `vm-bhyve` drivers;
+- per-resource PostgreSQL execution locks and crash resume;
+- observation-only reconciliation;
+- `doctor`, `plan`, `apply`, `reconcile`, `delete`, `migrate`, `status`, and `inspect`.
 
-Not yet implemented: address allocation, image promotion, cloud-init generation, Kea/ZFS/PF/`vm-bhyve` mutation, `apply`, `delete`, import, adoption, and reconciliation.
-
-A persisted plan is an execution contract. It is not evidence that infrastructure changed.
+The FreeBSD host remains a prerequisite. V2 does not yet install the base operating system, packages, network interfaces, PostgreSQL, Kea, or the parent PF policy.
 
 ## Quick path
 
@@ -24,15 +25,25 @@ A persisted plan is an execution contract. It is not evidence that infrastructur
 make verify
 make build
 
-bin/cpctl doctor --config /usr/local/etc/bkcp/site.toml --offline
 bin/cpctl doctor --config /usr/local/etc/bkcp/site.toml
 bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run --json
 bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml
-bin/cpctl status --config /usr/local/etc/bkcp/site.toml
-bin/cpctl plan --config /usr/local/etc/bkcp/site.toml --file ./vm.toml --generation 1 --json
+
+bin/cpctl apply \
+  --config /usr/local/etc/bkcp/site.toml \
+  --file ./vm.toml \
+  --json
+
+bin/cpctl reconcile freebsd-node-01 \
+  --config /usr/local/etc/bkcp/site.toml \
+  --json
+
+bin/cpctl inspect freebsd-node-01 \
+  --config /usr/local/etc/bkcp/site.toml \
+  --json
 ```
 
-Stop at `plan` until the V2 execution vertical slice is implemented.
+Replace the example all-zero image digest before `apply`; it is deliberately rejected by the image driver.
 
 ## Documentation
 
@@ -42,14 +53,15 @@ Stop at `plan` until the V2 execution vertical slice is implemented.
 4. [CLI and Operations](CLI-and-Operations)
 5. [Development and Roadmap](Development-and-Roadmap)
 
-The bare-metal runbook defines the V2-only target. It does not require `legacy/v1-shell`. It separates manual FreeBSD host prerequisites from the V2 capabilities still required for allocation, observation, typed infrastructure drivers, resumable execution, and public `apply`.
-
 ## Fixed rules
 
-- Persist plans and ordered steps before external mutation.
+- Persist declarations, allocations, operations, and ordered steps before external mutation.
+- Re-hash persisted step input immediately before execution.
 - Keep declared, allocated, observed, and effective state separate.
 - Never convert unavailable evidence into confirmed absence.
-- Restrict PF ownership to the configured anchor.
+- Serialize execution per resource and resume after process failure.
+- Restrict PF ownership to configured per-resource subanchors.
+- Require explicit `--destroy-storage` authorization for deletion.
 - Allocate and manage new resources directly through V2.
 
 ## Authoritative repository documents
@@ -59,4 +71,4 @@ The bare-metal runbook defines the V2-only target. It does not require `legacy/v
 - [State contract](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/STATE.md)
 - [Migration policy](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/MIGRATION.md)
 
-V1 is frozen on `legacy/v1-shell` for existing installations only. New V2-only environments do not need to create V1 resources or pass through V1 adoption.
+V1 remains frozen for existing installations only. Import and adoption of those resources are still separate future operations.

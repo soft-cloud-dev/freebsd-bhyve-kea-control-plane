@@ -10,6 +10,8 @@ import (
 )
 
 var ErrNotFound = errors.New("resource not found")
+var ErrBlocked = errors.New("operation blocked")
+var ErrDrift = errors.New("resource drift detected")
 
 type ResourceSummary struct {
 	UUID            string `json:"uuid"`
@@ -43,6 +45,24 @@ type Allocation struct {
 	ReleasedAt           *time.Time `json:"released_at,omitempty"`
 }
 
+type Observation struct {
+	UUID            string         `json:"uuid,omitempty"`
+	ResourceUUID    string         `json:"resource_uuid"`
+	CollectedAt     time.Time      `json:"collected_at,omitempty"`
+	ObserverVersion string         `json:"observer_version"`
+	VMState         string         `json:"vm_state"`
+	StorageState    string         `json:"storage_state"`
+	KeaState        string         `json:"kea_state"`
+	SeedState       string         `json:"seed_state"`
+	ImageState      string         `json:"image_state"`
+	PFState         string         `json:"pf_state"`
+	PowerState      string         `json:"power_state"`
+	Observed        map[string]any `json:"observed"`
+	ErrorCode       string         `json:"error_code,omitempty"`
+	ErrorDetail     string         `json:"error_detail,omitempty"`
+	PlanDigest      string         `json:"plan_digest,omitempty"`
+}
+
 type Effective struct {
 	State             string    `json:"state"`
 	ReasonCode        string    `json:"reason_code,omitempty"`
@@ -69,27 +89,31 @@ type Operation struct {
 }
 
 type OperationStep struct {
-	OperationUUID string     `json:"operation_uuid"`
-	Sequence      int        `json:"sequence"`
-	Driver        string     `json:"driver"`
-	Action        string     `json:"action"`
-	InputDigest   string     `json:"input_digest"`
-	Status        string     `json:"status"`
-	Attempts      int        `json:"attempts"`
-	StartedAt     *time.Time `json:"started_at,omitempty"`
-	CompletedAt   *time.Time `json:"completed_at,omitempty"`
-	ErrorCode     string     `json:"error_code,omitempty"`
-	ErrorDetail   string     `json:"error_detail,omitempty"`
+	OperationUUID       string     `json:"operation_uuid"`
+	Sequence            int        `json:"sequence"`
+	Driver              string     `json:"driver"`
+	Action              string     `json:"action"`
+	InputDigest         string     `json:"input_digest"`
+	InputJSON           string     `json:"input_json,omitempty"`
+	PostconditionJSON   string     `json:"postcondition_json,omitempty"`
+	PostconditionDigest string     `json:"postcondition_digest,omitempty"`
+	Status              string     `json:"status"`
+	Attempts            int        `json:"attempts"`
+	StartedAt           *time.Time `json:"started_at,omitempty"`
+	CompletedAt         *time.Time `json:"completed_at,omitempty"`
+	ErrorCode           string     `json:"error_code,omitempty"`
+	ErrorDetail         string     `json:"error_detail,omitempty"`
 }
 
 type Inspection struct {
-	Resource   ResourceSummary `json:"resource"`
-	Declared   *DeclaredVM     `json:"declared,omitempty"`
-	Allocation *Allocation     `json:"allocation,omitempty"`
-	Effective  *Effective      `json:"effective,omitempty"`
-	Operation  *Operation      `json:"operation,omitempty"`
-	Steps      []OperationStep `json:"steps,omitempty"`
-	ResumeStep *OperationStep  `json:"resume_step,omitempty"`
+	Resource    ResourceSummary `json:"resource"`
+	Declared    *DeclaredVM     `json:"declared,omitempty"`
+	Allocation  *Allocation     `json:"allocation,omitempty"`
+	Observation *Observation    `json:"observation,omitempty"`
+	Effective   *Effective      `json:"effective,omitempty"`
+	Operation   *Operation      `json:"operation,omitempty"`
+	Steps       []OperationStep `json:"steps,omitempty"`
+	ResumeStep  *OperationStep  `json:"resume_step,omitempty"`
 }
 
 type PreparedApply struct {

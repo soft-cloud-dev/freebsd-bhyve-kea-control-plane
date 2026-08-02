@@ -202,7 +202,7 @@ FROM bkcp.vm_specs WHERE resource_uuid = $1 AND generation = $2`, out.Resource.U
 	var ipAddress, macAddress, datasetName, zvolName, imageDigest *string
 	var keaSubnetID *int
 	if err := r.pool.QueryRow(ctx, `
-SELECT pool_name, ip_address::text, mac_address::text, dataset_name, zvol_name, kea_subnet_id, image_name, image_digest, allocation_generation, allocated_at, released_at
+SELECT pool_name, host(ip_address)::text, mac_address::text, dataset_name, zvol_name, kea_subnet_id, image_name, image_digest, allocation_generation, allocated_at, released_at
 FROM bkcp.vm_allocations WHERE resource_uuid = $1`, out.Resource.UUID).Scan(
 		&allocation.PoolName, &ipAddress, &macAddress, &datasetName, &zvolName, &keaSubnetID, &allocation.ImageName, &imageDigest, &allocation.AllocationGeneration, &allocation.AllocatedAt, &allocation.ReleasedAt,
 	); err == nil {
@@ -234,6 +234,29 @@ FROM bkcp.vm_allocations WHERE resource_uuid = $1`, out.Resource.UUID).Scan(
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return state.Inspection{}, fmt.Errorf("inspect effective state: %w", err)
 	}
+	var observation state.Observation
+	var observedJSON []byte
+	if err := r.pool.QueryRow(ctx, `
+SELECT uuid::text, resource_uuid::text, collected_at, observer_version,
+       vm_state, storage_state, kea_state, seed_state, image_state, pf_state, power_state, observed,
+       COALESCE(error_code, ''), COALESCE(error_detail, ''), COALESCE(plan_digest, '')
+FROM bkcp.vm_observations
+WHERE resource_uuid = $1
+ORDER BY collected_at DESC, uuid DESC
+LIMIT 1`, out.Resource.UUID).Scan(
+		&observation.UUID, &observation.ResourceUUID, &observation.CollectedAt, &observation.ObserverVersion,
+		&observation.VMState, &observation.StorageState, &observation.KeaState, &observation.SeedState,
+		&observation.ImageState, &observation.PFState, &observation.PowerState,
+		&observedJSON, &observation.ErrorCode, &observation.ErrorDetail, &observation.PlanDigest,
+	); err == nil {
+		if err := json.Unmarshal(observedJSON, &observation.Observed); err != nil {
+			return state.Inspection{}, fmt.Errorf("decode observation: %w", err)
+		}
+		out.Observation = &observation
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return state.Inspection{}, fmt.Errorf("inspect observation: %w", err)
+	}
+
 	operation, err := r.latestOperation(ctx, out.Resource.UUID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return state.Inspection{}, err
@@ -269,7 +292,9 @@ FROM bkcp.operations WHERE resource_uuid = $1 ORDER BY created_at DESC, uuid DES
 
 func (r *Repository) operationSteps(ctx context.Context, operationUUID string) ([]state.OperationStep, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT operation_uuid::text, sequence, driver, action, input_digest, status, attempts, started_at, completed_at, COALESCE(error_code, ''), COALESCE(error_detail, '')
+SELECT operation_uuid::text, sequence, driver, action, input_digest, input_json,
+       COALESCE(postcondition_json, ''), COALESCE(postcondition_digest, ''),
+       status, attempts, started_at, completed_at, COALESCE(error_code, ''), COALESCE(error_detail, '')
 FROM bkcp.operation_steps WHERE operation_uuid = $1 ORDER BY sequence`, operationUUID)
 	if err != nil {
 		return nil, fmt.Errorf("inspect operation steps: %w", err)
@@ -278,7 +303,11 @@ FROM bkcp.operation_steps WHERE operation_uuid = $1 ORDER BY sequence`, operatio
 	var result []state.OperationStep
 	for rows.Next() {
 		var step state.OperationStep
-		if err := rows.Scan(&step.OperationUUID, &step.Sequence, &step.Driver, &step.Action, &step.InputDigest, &step.Status, &step.Attempts, &step.StartedAt, &step.CompletedAt, &step.ErrorCode, &step.ErrorDetail); err != nil {
+		if err := rows.Scan(
+			&step.OperationUUID, &step.Sequence, &step.Driver, &step.Action, &step.InputDigest, &step.InputJSON,
+			&step.PostconditionJSON, &step.PostconditionDigest, &step.Status, &step.Attempts,
+			&step.StartedAt, &step.CompletedAt, &step.ErrorCode, &step.ErrorDetail,
+		); err != nil {
 			return nil, fmt.Errorf("scan operation step: %w", err)
 		}
 		result = append(result, step)

@@ -16,6 +16,7 @@
         "external_interface": {"type": "string", "minLength": 1},
         "management_interface": {"type": "string", "minLength": 1},
         "vm_bridge": {"type": "string", "minLength": 1},
+        "vm_switch": {"type": "string", "minLength": 1},
         "vm_dataset": {"type": "string", "minLength": 1},
         "vm_root": {"type": "string", "pattern": "^/"}
       }
@@ -45,6 +46,18 @@
       "properties": {
         "pf_anchor": {"type": "string", "minLength": 1},
         "manage_anchor": {"type": "boolean"}
+      }
+    },
+    "services": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manage": {"type": "boolean"},
+        "names": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$"}
+        }
       }
     },
     "pools": {

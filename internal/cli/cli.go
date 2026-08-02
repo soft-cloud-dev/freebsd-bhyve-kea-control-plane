@@ -36,6 +36,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "plan":
 		return runPlan(args[1:], stdout, stderr)
+	case "apply":
+		return runApply(args[1:], stdout, stderr)
+	case "reconcile":
+		return runReconcile(args[1:], stdout, stderr)
+	case "delete":
+		return runDelete(args[1:], stdout, stderr)
 	case "migrate":
 		return runMigrate(args[1:], stdout, stderr)
 	case "status":
@@ -187,6 +193,9 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  cpctl doctor [--config PATH] [--offline] [--json]")
 	fmt.Fprintln(w, "  cpctl plan --file VM.toml [--config PATH] [--generation N] [--json]")
+	fmt.Fprintln(w, "  cpctl apply --file VM.toml [--config PATH] [--json]")
+	fmt.Fprintln(w, "  cpctl reconcile NAME [--config PATH] [--json]")
+	fmt.Fprintln(w, "  cpctl delete NAME --destroy-storage [--config PATH] [--json]")
 	fmt.Fprintln(w, "  cpctl migrate [--config PATH] [--dry-run] [--json]")
 	fmt.Fprintln(w, "  cpctl status [--config PATH] [--json]")
 	fmt.Fprintln(w, "  cpctl inspect NAME [--config PATH] [--json]")

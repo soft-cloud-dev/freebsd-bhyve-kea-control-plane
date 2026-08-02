@@ -1,6 +1,6 @@
 # Architecture
 
-`cpctl` is a static Go control-plane CLI. It validates typed configuration, builds deterministic plans, stores durable PostgreSQL state, and will eventually coordinate narrow FreeBSD infrastructure drivers.
+`cpctl` is a static Go control-plane CLI. It validates typed configuration, allocates durable identities, persists deterministic execution contracts, and coordinates narrow FreeBSD infrastructure drivers.
 
 ```text
 site.toml + VM manifest
@@ -9,73 +9,119 @@ site.toml + VM manifest
  strict decode + normalize
           |
           v
- deterministic plan + digests
+ resource preparation lock
           |
           v
- PostgreSQL bkcp schema
- declared | allocated | observed | effective
+ PostgreSQL allocation
+ IP | MAC | dataset | zvol | Kea subnet | image
+          |
+          v
+ allocation-bound plan + exact step inputs
           |
           v
  operation + ordered-step journal
           |
           v
- future resumable executor
+ per-resource session execution lock
           |
- image | ZFS | cloud-init | Kea | vm-bhyve | PF
+          v
+ service | image | ZFS | cloud-init | vm-bhyve | Kea | PF
+          |
+          v
+ authoritative observations
+          |
+          v
+ effective converged | drifted | degraded | absent | blocked
 ```
-
-The current implementation stops before the executor.
 
 ## Four-state model
 
-| State | Meaning | Current status |
+| State | Meaning | Implementation |
 |---|---|---|
-| Declared | Normalized requested intent by generation | Implemented |
-| Allocated | Durable IP, MAC, storage, subnet, and image assignments | Schema only |
-| Observed | Evidence from authoritative external systems | Schema only |
-| Effective | Derived reconciliation result and reason | Implemented foundation |
+| Declared | Normalized requested intent by generation | Append-only `bkcp.vm_specs` |
+| Allocated | Durable IP, MAC, storage, subnet, and image assignments | `bkcp.vm_allocations` under resource and pool locks |
+| Observed | Evidence from authoritative external systems | Append-only `bkcp.vm_observations` |
+| Effective | Derived reconciliation result and reason | Current `bkcp.vm_effective` |
 
-Unavailable evidence remains unknown. It is never interpreted as confirmed absence.
+Unavailable evidence remains explicit. It is never interpreted as confirmed absence.
 
 ## Determinism
 
-The same normalized manifest, control-plane ID, generation, action, and ordered-step contract must produce the same:
+The same normalized manifest, control-plane ID, generation, durable allocation, action, site execution contract, and ordered steps produce the same:
 
 - specification digest;
-- plan digest;
-- step input digests;
+- exact step input JSON;
+- step input digest;
+- execution plan digest;
 - idempotency key.
 
-Identical intent retains its generation. Changed intent advances the generation exactly once under a transaction-scoped resource lock.
+A pure `plan` previews abstract intent. `apply` consults PostgreSQL and creates the allocation-bound executable plan.
+
+Identical intent retains its generation and allocation. Changed intent advances the generation exactly once under the resource preparation lock. Implicit pool or image replacement is blocked.
 
 ## Persist before mutation
 
-The internal `PrepareApply` transaction:
+Executable apply preparation:
 
-1. locks the resource;
-2. loads or creates its stable UUID;
-3. compares normalized intent;
-4. retains or advances the generation;
-5. appends changed declared state;
-6. builds the deterministic plan;
-7. inserts or reuses the operation;
-8. stores ordered steps once;
+1. acquires the execution-key transaction lock, blocking preparation during active mutation;
+2. acquires the transaction-scoped resource lock;
+3. loads or creates the stable resource UUID;
+4. retains or advances the declared generation;
+5. assigns or reuses durable allocation identities under a pool lock;
+6. builds the allocation-bound executable plan;
+7. inserts or reuses the operation by idempotency key;
+8. persists ordered steps with exact input JSON and digests;
 9. marks effective state pending;
-10. commits.
+10. commits before any external mutation.
 
-It executes no external driver.
+The executor then acquires the same resource execution key as a PostgreSQL session advisory lock. This serializes mutation across processes. A process crash closes the session and releases the lock.
 
-A future executor may run only persisted steps, must verify every postcondition, and must resume from the first unverified step after interruption.
+## Resumable execution
+
+For each incomplete step, the executor:
+
+1. claims the persisted step;
+2. decodes its exact JSON input;
+3. recomputes and verifies its input digest;
+4. invokes one typed driver action;
+5. verifies the authoritative postcondition;
+6. stores postcondition JSON and digest;
+7. proceeds to the next incomplete step.
+
+A retry skips steps already marked `succeeded` or `skipped`. It does not restart blindly.
+
+## Typed drivers
+
+- **Service** — optionally starts and verifies explicitly named FreeBSD rc.d services.
+- **Image** — downloads to a temporary path, verifies compressed SHA-256, decompresses, hashes the raw image, and atomically promotes the cache.
+- **ZFS** — creates the VM dataset and sparse zvol, verifies exact volume size, initializes only a newly created zvol, and stores the raw-image identity as a ZFS property.
+- **Cloud-init** — renders deterministic NoCloud source, creates a `cidata` ISO, and binds reuse to source and ISO digests.
+- **vm-bhyve** — writes the typed guest configuration and converges requested power.
+- **Kea** — creates, updates, deletes, and verifies PostgreSQL-backed reservations through the Control Agent.
+- **PF** — manages only the configured per-resource subanchor.
+- **Observer** — collects VM, storage, Kea, seed, power, image, and PF evidence and preserves unavailable versus absent.
+
+Drivers accept typed inputs rather than arbitrary shell command strings. Credential contents are read from referenced files and are not persisted in operation input.
+
+## Reconciliation
+
+`reconcile` is an observation-only journaled operation. It records current evidence and returns drift when observations do not match intent. It does not silently repair or replace identity-bearing resources.
+
+Repeated `apply` with unchanged executable identity uses reconciliation rather than replaying completed mutations.
+
+## Deletion
+
+Deletion is a separate deterministic operation and requires explicit `--destroy-storage` authorization. V2 stops the VM, removes Kea and PF state, removes the VM and seed media, destroys the allocated ZFS dataset, verifies absence, releases the allocation, and archives the resource.
 
 ## Authority boundaries
 
-- PostgreSQL owns V2 intent, allocations, evidence, effective state, and operation history.
+- PostgreSQL owns V2 intent, allocations, journals, evidence, and effective state.
 - Kea remains authoritative for DHCP reservations.
-- ZFS and `vm-bhyve` remain authoritative for storage and runtime facts.
-- PF ownership is limited to the configured anchor.
-- Images require independently verified digests before promotion.
-
-Planning and state handling must not become an unrestricted root shell. Future privileged work must use typed driver operations with explicit inputs and verified postconditions.
+- ZFS remains authoritative for datasets, zvols, size, and stored image identity.
+- `vm-bhyve` remains authoritative for guest discovery and power state.
+- PF ownership is limited to the configured parent and per-resource subanchor.
+- The verified image cache owns promoted artifact bytes and digest markers.
+- The FreeBSD host installation and site-owned parent policy remain prerequisites rather than per-VM operations.
 
 ## PostgreSQL objects
 
@@ -84,12 +130,12 @@ Planning and state handling must not become an unrestricted root shell. Future p
 - `bkcp.vm_specs` — append-only declared intent;
 - `bkcp.vm_allocations` — durable assignments;
 - `bkcp.vm_observations` — evidence snapshots;
-- `bkcp.vm_effective` — derived state;
-- `bkcp.operations` — operation headers;
-- `bkcp.operation_steps` — ordered resumable work.
+- `bkcp.vm_effective` — current derived state;
+- `bkcp.operations` — operation headers and idempotency keys;
+- `bkcp.operation_steps` — exact inputs, status, retries, and verified postconditions.
 
 Applied migrations are immutable and checksum-verified. Add a new migration version instead of editing an applied file or checksum row.
 
 ## Legacy boundary
 
-V1 is frozen on `legacy/v1-shell`. V2 does not modify legacy `public` objects. Future adoption must preserve guest names, IP addresses, MAC addresses, storage identities, and Kea reservation identities.
+V1 is frozen on `legacy/v1-shell`. New V2 resources do not depend on it. Future import and adoption of existing V1 resources must preserve guest names, IP addresses, MAC addresses, storage identities, image identity, and Kea reservations.

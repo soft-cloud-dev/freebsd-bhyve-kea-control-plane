@@ -15,6 +15,7 @@ type Site struct {
 	Database       Database `json:"database"`
 	Kea            Kea      `json:"kea"`
 	Network        Network  `json:"network"`
+	Services       Services `json:"services"`
 	Pools          []Pool   `json:"pools"`
 	Images         []Image  `json:"images"`
 }
@@ -23,6 +24,7 @@ type Host struct {
 	ExternalInterface   string `json:"external_interface"`
 	ManagementInterface string `json:"management_interface"`
 	VMBridge            string `json:"vm_bridge"`
+	VMSwitch            string `json:"vm_switch"`
 	VMDataset           string `json:"vm_dataset"`
 	VMRoot              string `json:"vm_root"`
 }
@@ -42,6 +44,11 @@ type Kea struct {
 type Network struct {
 	PFAnchor     string `json:"pf_anchor"`
 	ManageAnchor bool   `json:"manage_anchor"`
+}
+
+type Services struct {
+	Manage bool     `json:"manage"`
+	Names  []string `json:"names"`
 }
 
 type Pool struct {
@@ -68,7 +75,7 @@ func LoadSite(path string) (Site, error) {
 	if err != nil {
 		return Site{}, fmt.Errorf("decode site config: %w", err)
 	}
-	if err := rejectUnknown(doc, "schema", "control_plane_id", "host", "database", "kea", "network", "pools", "images"); err != nil {
+	if err := rejectUnknown(doc, "schema", "control_plane_id", "host", "database", "kea", "network", "services", "pools", "images"); err != nil {
 		return Site{}, fmt.Errorf("decode site config: %w", err)
 	}
 	site, err := decodeSite(doc)
@@ -95,7 +102,7 @@ func decodeSite(doc map[string]any) (Site, error) {
 	if err != nil {
 		return Site{}, err
 	}
-	if err := rejectUnknown(host, "external_interface", "management_interface", "vm_bridge", "vm_dataset", "vm_root"); err != nil {
+	if err := rejectUnknown(host, "external_interface", "management_interface", "vm_bridge", "vm_switch", "vm_dataset", "vm_root"); err != nil {
 		return Site{}, fmt.Errorf("host: %w", err)
 	}
 	if site.Host.ExternalInterface, err = requiredString(host, "external_interface"); err != nil {
@@ -106,6 +113,12 @@ func decodeSite(doc map[string]any) (Site, error) {
 	}
 	if site.Host.VMBridge, err = requiredString(host, "vm_bridge"); err != nil {
 		return Site{}, err
+	}
+	if site.Host.VMSwitch, err = optionalString(host, "vm_switch"); err != nil {
+		return Site{}, err
+	}
+	if site.Host.VMSwitch == "" {
+		site.Host.VMSwitch = site.Host.VMBridge
 	}
 	if site.Host.VMDataset, err = requiredString(host, "vm_dataset"); err != nil {
 		return Site{}, err
@@ -160,6 +173,22 @@ func decodeSite(doc map[string]any) (Site, error) {
 	}
 	if site.Network.ManageAnchor, err = requiredBool(network, "manage_anchor"); err != nil {
 		return Site{}, err
+	}
+
+	if serviceValue, exists := doc["services"]; exists {
+		services, ok := serviceValue.(map[string]any)
+		if !ok {
+			return Site{}, fmt.Errorf("services must be a table")
+		}
+		if err := rejectUnknown(services, "manage", "names"); err != nil {
+			return Site{}, fmt.Errorf("services: %w", err)
+		}
+		if site.Services.Manage, err = optionalBool(services, "manage"); err != nil {
+			return Site{}, err
+		}
+		if site.Services.Names, err = optionalStrings(services, "names"); err != nil {
+			return Site{}, err
+		}
 	}
 
 	poolTables, err := requiredArrayTables(doc, "pools")

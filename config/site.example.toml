@@ -5,6 +5,7 @@ control_plane_id = "softcloud-lab-01"
 external_interface = "igb0"
 management_interface = "vlan10"
 vm_bridge = "bridge0"
+vm_switch = "public"
 vm_dataset = "zroot/vm"
 vm_root = "/zroot/vm"
 
@@ -22,6 +23,11 @@ request_timeout_ms = 5000
 pf_anchor = "bkcp"
 manage_anchor = true
 
+[services]
+# When enabled, V2 starts and verifies only the explicitly listed FreeBSD rc.d services.
+manage = false
+names = []
+
 [[pools]]
 name = "vm-lan"
 subnet = "10.0.20.0/24"
@@ -33,9 +39,9 @@ vlan = 20
 kea_subnet_id = 1
 
 [[images]]
-name = "freebsd-14.3"
-url = "https://download.freebsd.org/releases/VM-IMAGES/14.3-RELEASE/amd64/Latest/FreeBSD-14.3-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz"
-# Validation sentinel only. Replace before image fetch or apply is implemented.
+name = "freebsd-14.4"
+url = "https://download.freebsd.org/releases/VM-IMAGES/14.4-RELEASE/amd64/Latest/FreeBSD-14.4-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz"
+# Validation sentinel only. Replace with an independently verified digest before apply.
 compressed_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 format = "raw.xz"
 loader = "bhyveload"
