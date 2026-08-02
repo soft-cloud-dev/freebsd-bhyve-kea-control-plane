@@ -21,39 +21,67 @@ The guest must support cloud-init NoCloud. The provisioner enforces `bhyveload` 
 
 ## Provision a three-node FreeBSD cluster
 
-The cluster lifecycle provisions three jail-ready FreeBSD guests, waits for cloud-init over SSH, writes a local inventory, and optionally configures `kubectl` on the FreeBSD control-plane host.
+The cluster lifecycle bootstraps local `kubectl` access, provisions three jail-ready FreeBSD guests, waits for cloud-init over SSH, and writes a protected inventory.
 
 ```sh
 sudo make cluster-up \
   CONTROL_PLANE_ID=softcloud-lab-01 \
   SSH_PUBLIC_KEY_FILE=/root/.ssh/id_ed25519.pub \
-  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519 \
-  KUBECONFIG_SOURCE=/root/kubeconfig
+  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519
 ```
 
 Defaults:
 
 ```text
-nodes             freebsd-node-01 .. freebsd-node-03
-node count        3
-cloud-init profile config/cloud-init/freebsd-jail-node.yaml
-boot timeout      600 seconds per node
-inventory         /var/db/freebsd-bhyve-kea-control-plane/clusters/freebsd-node.tsv
-kubeconfig        /root/.kube/config
+nodes                  freebsd-node-01 .. freebsd-node-03
+node count             3
+cloud-init profile     config/cloud-init/freebsd-jail-node.yaml
+boot timeout           600 seconds per node
+inventory              /var/db/freebsd-bhyve-kea-control-plane/clusters/freebsd-node.tsv
+kubeconfig source      fedora@ipa.softcloud.dev:/etc/kubernetes/admin.conf via sudo -n cat
+kubeconfig destination /root/.kube/config
+control-plane hosts    /var/db/freebsd-bhyve-kea-control-plane/clusters/kubernetes-control-plane.known_hosts
 ```
 
-The workflow performs all conflict checks before creating a VM. If a later node fails, it deprovisions only the nodes created by that run. A readable private key enables SSH/cloud-init readiness checks; without one, provisioning succeeds but readiness checks are skipped with a warning.
+Before creating a VM, `cluster-up` runs `bootstrap-kubectl`. The bootstrap target:
 
-The profile installs WireGuard tooling and enables native jails. It does not generate WireGuard keys, peers, routes, or jail definitions.
+1. installs the FreeBSD `kubectl` package when missing;
+2. uses `KUBECONFIG_SOURCE` when a readable local file is supplied;
+3. otherwise reuses an existing destination unless `KUBECONFIG_REFRESH=yes`;
+4. otherwise fetches the remote kubeconfig over batch-mode SSH;
+5. validates the fetched file before replacing an existing configuration;
+6. installs it atomically with mode `0600`;
+7. verifies the installed context and API with `kubectl cluster-info`.
 
-`kubectl` behavior:
+Bootstrap or refresh access without provisioning guests:
 
-- `KUBECTL_BOOTSTRAP=yes` installs the FreeBSD `kubectl` package when missing;
-- `KUBECONFIG_SOURCE=/path/config` installs the kubeconfig atomically with mode `0600`;
-- `KUBECTL_VERIFY=yes` verifies the current context and API reachability with `kubectl cluster-info`;
-- without a kubeconfig, the client is installed but no Kubernetes API is configured.
+```sh
+sudo make bootstrap-kubectl \
+  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519
 
-The FreeBSD guests are not configured as Kubernetes kubelet nodes. This command bootstraps an administrative client for an existing Kubernetes API.
+sudo make bootstrap-kubectl \
+  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519 \
+  KUBECONFIG_REFRESH=yes
+```
+
+Override the Kubernetes control plane when needed:
+
+```sh
+sudo make bootstrap-kubectl \
+  KUBECONFIG_REMOTE_HOST=control-plane.example.net \
+  KUBECONFIG_REMOTE_USER=root \
+  KUBECONFIG_REMOTE_SUDO=no \
+  KUBECONFIG_REMOTE_PATH=/etc/kubernetes/admin.conf \
+  KUBECONFIG_REMOTE_SSH_KEY=/root/.ssh/control-plane_ed25519
+```
+
+The default `fedora` account must have passwordless sudo permission to read `/etc/kubernetes/admin.conf`. Alternatively, override the remote user and sudo mode.
+
+SSH uses `StrictHostKeyChecking=accept-new` with a dedicated known-hosts file. A changed control-plane host key is rejected; review and remove the stale entry deliberately rather than disabling host-key verification.
+
+The cluster workflow performs all VM and inventory conflict checks before creating a guest. If a later node fails, it deprovisions only nodes created by that run. A readable private key enables SSH/cloud-init readiness checks; without one, provisioning succeeds but readiness checks are skipped with a warning.
+
+The profile installs WireGuard tooling and enables native jails. It does not generate WireGuard keys, peers, routes, or jail definitions. The FreeBSD guests are not configured as Kubernetes kubelet nodes; `kubectl` administers the existing Kubernetes API.
 
 Inspect or remove the topology:
 
@@ -75,7 +103,7 @@ sudo make cluster-up \
   SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519
 ```
 
-The legacy `scripts/provision_freebsd_jail_cluster.sh` entry point remains available and routes through the same lifecycle with the historical `jail-node-01` naming and kubectl bootstrap disabled by default.
+The legacy `scripts/provision_freebsd_jail_cluster.sh` entry point remains available and routes through the same lifecycle with the historical `jail-node-01` naming.
 
 Single jail-ready guest:
 
@@ -255,7 +283,8 @@ Back up:
 - vm-bhyve templates and guest definitions;
 - ZFS snapshots and replication targets;
 - SSH host keys and future CA trust anchors;
-- site-controlled image URLs, pinned digests, `CONTROL_PLANE_ID`, and cluster kubeconfig sources.
+- `/root/.kube/config` and the dedicated control-plane known-hosts file;
+- site-controlled image URLs, pinned digests, `CONTROL_PLANE_ID`, and kubeconfig source settings.
 
 The verified cloud-image cache is reproducible and does not need backup when its source and digest policy are recorded.
 

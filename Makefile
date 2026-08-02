@@ -67,20 +67,28 @@ CLUSTER_SSH_USER ?= ${CLOUD_INIT_USER}
 KUBECTL_BOOTSTRAP ?= yes
 KUBECONFIG_SOURCE ?=
 KUBECONFIG_DEST ?= /root/.kube/config
+KUBECONFIG_REFRESH ?= no
+KUBECONFIG_REMOTE_HOST ?= ipa.softcloud.dev
+KUBECONFIG_REMOTE_USER ?= fedora
+KUBECONFIG_REMOTE_PATH ?= /etc/kubernetes/admin.conf
+KUBECONFIG_REMOTE_SSH_KEY ?= ${SSH_PRIVATE_KEY_FILE}
+KUBECONFIG_REMOTE_SUDO ?= yes
+KUBECONFIG_KNOWN_HOSTS ?= ${CLUSTER_STATE_DIR}/kubernetes-control-plane.known_hosts
 KUBECTL_VERIFY ?= yes
 
-SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/deprovision_vm.sh scripts/fetch_freebsd_cloud_image.sh scripts/freebsd_cluster.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/migrate_vm_to_bhyveload.sh scripts/provision_freebsd_jail_cluster.sh scripts/provision_freebsd_jail_node.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
-TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh tests/test_cloud_image.sh tests/test_cluster.sh
+SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/bootstrap_kubeconfig.sh scripts/configure_services.sh scripts/deprovision_vm.sh scripts/fetch_freebsd_cloud_image.sh scripts/freebsd_cluster.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/migrate_vm_to_bhyveload.sh scripts/provision_freebsd_jail_cluster.sh scripts/provision_freebsd_jail_node.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
+TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh tests/test_cloud_image.sh tests/test_cluster.sh tests/test_kubeconfig.sh
 
 .NOTPARALLEL:
-.PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies install-stork-agent-packages configure-host configure-services deprovision deprovision-vm provision-vm provision-jail-cluster cluster-up cluster-down cluster-status fetch-cloud-image init-postgresql init-kea-host-db init-stork init-ipam init-vm start-services validate-freebsd
+.PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies install-stork-agent-packages configure-host configure-services deprovision deprovision-vm provision-vm provision-jail-cluster bootstrap-kubectl cluster-up cluster-down cluster-status fetch-cloud-image init-postgresql init-kea-host-db init-stork init-ipam init-vm start-services validate-freebsd
 
 all help:
 	@echo "FreeBSD bhyve + Kea Control Plane"
 	@echo "Run: make install TRUSTED_SSH_READY=yes SSH_ADMIN_KEY_FILE=/root/id_ed25519.pub EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0"
 	@echo "SSH after hardening: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
 	@echo "Provision VM: make provision-vm VM_NAME=<name> SSH_PUBLIC_KEY_FILE=/root/id_ed25519.pub CONTROL_PLANE_ID=<stable-id>"
-	@echo "FreeBSD cluster: make cluster-up SSH_PUBLIC_KEY_FILE=/root/id_ed25519.pub SSH_PRIVATE_KEY_FILE=/root/id_ed25519 CONTROL_PLANE_ID=<stable-id> [KUBECONFIG_SOURCE=/path/config]"
+	@echo "Bootstrap kubectl: make bootstrap-kubectl SSH_PRIVATE_KEY_FILE=/root/id_ed25519"
+	@echo "FreeBSD cluster: make cluster-up SSH_PUBLIC_KEY_FILE=/root/id_ed25519.pub SSH_PRIVATE_KEY_FILE=/root/id_ed25519 CONTROL_PLANE_ID=<stable-id>"
 	@echo "Cluster status: make cluster-status"
 	@echo "Cluster removal: make cluster-down"
 	@echo "Legacy jail cluster: make provision-jail-cluster SSH_PUBLIC_KEY_FILE=/root/id_ed25519.pub CONTROL_PLANE_ID=<stable-id>"
@@ -100,6 +108,7 @@ test: lint
 	@sh tests/test_stork.sh
 	@sh tests/test_cloud_image.sh
 	@sh tests/test_cluster.sh
+	@sh tests/test_kubeconfig.sh
 
 check-root:
 	@test "$$(id -u)" -eq 0 || { echo "ERROR: run make install as root" >&2; exit 1; }
@@ -159,8 +168,11 @@ provision-vm: fetch-cloud-image
 	@test -n "${VM_NAME}" || { echo "ERROR: set VM_NAME=<name>" >&2; exit 64; }
 	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" VM_OWNER="${VM_OWNER}" CLOUD_INIT_USER="${CLOUD_INIT_USER}" CONTROL_PLANE_ID="${CONTROL_PLANE_ID}" SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256}" FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL}" sh scripts/provision_vm.sh "${VM_NAME}" "${TEMPLATE}"
 
-cluster-up: fetch-cloud-image
-	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" IPAM_POOL="${IPAM_POOL}" VM_OWNER="${VM_OWNER}" CLOUD_INIT_USER="${CLOUD_INIT_USER}" CONTROL_PLANE_ID="${CONTROL_PLANE_ID}" SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE}" SSH_PRIVATE_KEY_FILE="${SSH_PRIVATE_KEY_FILE}" CLUSTER_NODE_PREFIX="${CLUSTER_NODE_PREFIX}" CLUSTER_NODE_COUNT="${CLUSTER_NODE_COUNT}" CLUSTER_PROFILE_FILE="${CLUSTER_PROFILE_FILE}" CLUSTER_STATE_DIR="${CLUSTER_STATE_DIR}" CLUSTER_BOOT_TIMEOUT="${CLUSTER_BOOT_TIMEOUT}" CLUSTER_POLL_INTERVAL="${CLUSTER_POLL_INTERVAL}" CLUSTER_SSH_USER="${CLUSTER_SSH_USER}" KUBECTL_BOOTSTRAP="${KUBECTL_BOOTSTRAP}" KUBECONFIG_SOURCE="${KUBECONFIG_SOURCE}" KUBECONFIG_DEST="${KUBECONFIG_DEST}" KUBECTL_VERIFY="${KUBECTL_VERIFY}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256}" FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL}" sh scripts/freebsd_cluster.sh up
+bootstrap-kubectl:
+	@KUBECTL_BOOTSTRAP="${KUBECTL_BOOTSTRAP}" KUBECTL_VERIFY="${KUBECTL_VERIFY}" KUBECONFIG_SOURCE="${KUBECONFIG_SOURCE}" KUBECONFIG_DEST="${KUBECONFIG_DEST}" KUBECONFIG_REFRESH="${KUBECONFIG_REFRESH}" KUBECONFIG_REMOTE_HOST="${KUBECONFIG_REMOTE_HOST}" KUBECONFIG_REMOTE_USER="${KUBECONFIG_REMOTE_USER}" KUBECONFIG_REMOTE_PATH="${KUBECONFIG_REMOTE_PATH}" KUBECONFIG_REMOTE_SSH_KEY="${KUBECONFIG_REMOTE_SSH_KEY}" KUBECONFIG_REMOTE_SUDO="${KUBECONFIG_REMOTE_SUDO}" KUBECONFIG_KNOWN_HOSTS="${KUBECONFIG_KNOWN_HOSTS}" SSH_PRIVATE_KEY_FILE="${SSH_PRIVATE_KEY_FILE}" sh scripts/bootstrap_kubeconfig.sh
+
+cluster-up: fetch-cloud-image bootstrap-kubectl
+	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" IPAM_POOL="${IPAM_POOL}" VM_OWNER="${VM_OWNER}" CLOUD_INIT_USER="${CLOUD_INIT_USER}" CONTROL_PLANE_ID="${CONTROL_PLANE_ID}" SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE}" SSH_PRIVATE_KEY_FILE="${SSH_PRIVATE_KEY_FILE}" CLUSTER_NODE_PREFIX="${CLUSTER_NODE_PREFIX}" CLUSTER_NODE_COUNT="${CLUSTER_NODE_COUNT}" CLUSTER_PROFILE_FILE="${CLUSTER_PROFILE_FILE}" CLUSTER_STATE_DIR="${CLUSTER_STATE_DIR}" CLUSTER_BOOT_TIMEOUT="${CLUSTER_BOOT_TIMEOUT}" CLUSTER_POLL_INTERVAL="${CLUSTER_POLL_INTERVAL}" CLUSTER_SSH_USER="${CLUSTER_SSH_USER}" KUBECTL_BOOTSTRAP="${KUBECTL_BOOTSTRAP}" KUBECONFIG_SOURCE="" KUBECONFIG_DEST="${KUBECONFIG_DEST}" KUBECTL_VERIFY="${KUBECTL_VERIFY}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256}" FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL}" sh scripts/freebsd_cluster.sh up
 
 cluster-status:
 	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" CLUSTER_NODE_PREFIX="${CLUSTER_NODE_PREFIX}" CLUSTER_NODE_COUNT="${CLUSTER_NODE_COUNT}" CLUSTER_PROFILE_FILE="${CLUSTER_PROFILE_FILE}" CLUSTER_STATE_DIR="${CLUSTER_STATE_DIR}" sh scripts/freebsd_cluster.sh status
@@ -168,8 +180,8 @@ cluster-status:
 cluster-down:
 	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" CLUSTER_NODE_PREFIX="${CLUSTER_NODE_PREFIX}" CLUSTER_NODE_COUNT="${CLUSTER_NODE_COUNT}" CLUSTER_PROFILE_FILE="${CLUSTER_PROFILE_FILE}" CLUSTER_STATE_DIR="${CLUSTER_STATE_DIR}" sh scripts/freebsd_cluster.sh down
 
-provision-jail-cluster: fetch-cloud-image
-	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" IPAM_POOL="${IPAM_POOL}" VM_OWNER="${VM_OWNER}" CLOUD_INIT_USER="${CLOUD_INIT_USER}" CONTROL_PLANE_ID="${CONTROL_PLANE_ID}" SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE}" SSH_PRIVATE_KEY_FILE="${SSH_PRIVATE_KEY_FILE}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256}" FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL}" sh scripts/provision_freebsd_jail_cluster.sh
+provision-jail-cluster: fetch-cloud-image bootstrap-kubectl
+	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" IPAM_POOL="${IPAM_POOL}" VM_OWNER="${VM_OWNER}" CLOUD_INIT_USER="${CLOUD_INIT_USER}" CONTROL_PLANE_ID="${CONTROL_PLANE_ID}" SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE}" SSH_PRIVATE_KEY_FILE="${SSH_PRIVATE_KEY_FILE}" KUBECONFIG_SOURCE="" KUBECONFIG_DEST="${KUBECONFIG_DEST}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256}" FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL}" sh scripts/provision_freebsd_jail_cluster.sh
 
 start-services:
 	@PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT}" DNS_READY_TIMEOUT="${DNS_READY_TIMEOUT}" STORK_READY_TIMEOUT="${STORK_READY_TIMEOUT}" STORK_ENABLE="${STORK_ENABLE}" MGMT_ADDR="${MGMT_ADDR}" DNS_ADDR="${DNS_ADDR}" KEA_API_USER_FILE="${KEA_API_USER_FILE}" KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE}" sh scripts/start_services.sh
@@ -182,4 +194,5 @@ validate-freebsd: lint
 	@sh tests/test_stork.sh
 	@sh tests/test_cloud_image.sh
 	@sh tests/test_cluster.sh
+	@sh tests/test_kubeconfig.sh
 	@sockstat -4 -6 -l

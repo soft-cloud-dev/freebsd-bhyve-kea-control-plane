@@ -81,17 +81,33 @@ sudo make deprovision-vm VM_NAME=db-node-01
 
 ## Provision three FreeBSD nodes
 
-One command provisions `freebsd-node-01` through `freebsd-node-03`, waits for cloud-init readiness over SSH, writes a TSV inventory, and bootstraps the local `kubectl` client:
+One command bootstraps `kubectl`, provisions `freebsd-node-01` through `freebsd-node-03`, waits for cloud-init readiness over SSH, and writes a protected TSV inventory:
 
 ```sh
 sudo make cluster-up \
   CONTROL_PLANE_ID=softcloud-lab-01 \
   SSH_PUBLIC_KEY_FILE=/root/.ssh/id_ed25519.pub \
-  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519 \
-  KUBECONFIG_SOURCE=/root/kubeconfig
+  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519
 ```
 
-`KUBECONFIG_SOURCE` is optional. When supplied, it is installed as `/root/.kube/config` and verified with `kubectl cluster-info`. The FreeBSD guests are prepared for native jails and WireGuard; this workflow does not install `kubelet` or `kubeadm` on them.
+By default, kubeconfig is fetched from:
+
+```text
+fedora@ipa.softcloud.dev:/etc/kubernetes/admin.conf via sudo -n cat
+```
+
+It is installed atomically at `/root/.kube/config` and verified with `kubectl cluster-info`. Override `KUBECONFIG_REMOTE_HOST`, `KUBECONFIG_REMOTE_USER`, `KUBECONFIG_REMOTE_PATH`, `KUBECONFIG_REMOTE_SUDO`, or `KUBECONFIG_REMOTE_SSH_KEY` when needed. A local `KUBECONFIG_SOURCE` still takes precedence.
+
+Bootstrap or refresh only kubectl access:
+
+```sh
+sudo make bootstrap-kubectl SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519
+sudo make bootstrap-kubectl \
+  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519 \
+  KUBECONFIG_REFRESH=yes
+```
+
+The FreeBSD guests are prepared for native jails and WireGuard. This workflow does not install `kubelet` or `kubeadm` on them.
 
 ```sh
 sudo make cluster-status
