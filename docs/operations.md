@@ -2,9 +2,7 @@
 
 ## Provision a VM
 
-The provisioner creates a NoCloud seed ISO containing the VM identity, local hostname, management user, and trusted Ed25519 SSH public key. Supply the key through a file where possible so it does not enter shell history.
-
-Set `CONTROL_PLANE_ID` to a stable identifier shared by the hosts that participate in one control-plane inventory. Do not derive it from a transient hostname. When omitted, the provisioner falls back to `/etc/hostid` and then the current hostname.
+Use a stable `CONTROL_PLANE_ID` for every host sharing the same inventory database.
 
 ```sh
 sudo PGDATABASE=inventory \
@@ -17,55 +15,48 @@ sudo PGDATABASE=inventory \
   sh scripts/provision_vm.sh db-node-01 freebsd
 ```
 
-For automation, `SSH_AUTHORIZED_KEY` may contain the complete public-key line directly. A site can pin the compressed cloud-image digest with `FREEBSD_CLOUD_IMAGE_SHA256`; otherwise the fetcher resolves the release `CHECKSUM.SHA256` file.
+The provisioner:
 
-The operation succeeds only after:
+1. rejects duplicate or stale active state;
+2. verifies and writes the cloud image;
+3. creates the guest and NoCloud seed;
+4. allocates IP, MAC, and inventory state in PostgreSQL;
+5. adds an authenticated database-backed Kea reservation;
+6. starts the VM and marks the inventory row `running`.
 
-1. PostgreSQL confirms that the name has no non-archived inventory row;
-2. vm-bhyve confirms that no guest already uses the name and creates the guest definition and zvol;
-3. the FreeBSD cloud image is downloaded when necessary, checksum-verified, decompressed, and recorded with a raw-cache verification marker;
-4. the verified raw image is written to the guest zvol;
-5. one PostgreSQL transaction allocates the IP address and collision-checked MAC address and inserts the `provisioning` inventory row;
-6. the allocated MAC is persisted in the vm-bhyve guest configuration;
-7. a `cidata` NoCloud seed ISO is created as `seed.iso` in the guest directory;
-8. Kea accepts an authenticated `reservation-add` directed explicitly to the PostgreSQL hosts database;
-9. the VM starts; and
-10. the inserted inventory row is marked `running` by UUID.
+Failures trigger best-effort cleanup. A host crash may still leave state requiring reconciliation.
 
-Earlier failures trigger compensating cleanup of temporary seed inputs, Kea reservations and leases, PostgreSQL inventory/IPAM state, and vm-bhyve state.
+The guest must use cloud-init with the NoCloud datasource. The provisioner enforces the native `bhyveload` loader before first boot.
 
-An existing active name is never replaced automatically. Inspect it and, when removal is intended, run `scripts/deprovision_vm.sh` before retrying provisioning. Deprovisioning also completes when the Kea reservation or vm-bhyve guest is already absent, which permits cleanup of a stale inventory row. The provisioner reports stale inventory explicitly when PostgreSQL has an active row but vm-bhyve has no matching guest.
+For direct key input, `SSH_AUTHORIZED_KEY` may replace `SSH_PUBLIC_KEY_FILE`.
 
-Finalization and compensating cleanup use the UUID of the newly inserted inventory row so archived rows that previously used the same VM name remain archived and are never modified by a new provisioning run.
+## Provision jail-ready guests
 
-The guest image must include cloud-init with the NoCloud datasource enabled. The selected vm-bhyve template must attach `seed.iso` as a CD-ROM. The provisioner enforces `bhyveload` in every newly created guest configuration before first boot, even if the installed vm-bhyve template is stale.
-
-To migrate an existing `uefi` or `uefi-csm` guest through a guarded stop/change/start cycle:
-
-```sh
-sudo sh scripts/migrate_vm_to_bhyveload.sh db-node-03
-```
-
-The migration restores the original configuration and restarts the previous loader if changing the loader or restarting the VM fails.
-
-## Provision a FreeBSD WireGuard and jail node
-
-Provision a `bhyveload` FreeBSD VM prepared with WireGuard tooling and native FreeBSD jails:
+Single FreeBSD WireGuard and jail node:
 
 ```sh
 sudo PGDATABASE=inventory \
   PGUSER=postgres \
   IPAM_POOL=vm-lan \
-  VM_OWNER=admin \
-  CLOUD_INIT_USER=admin \
   CONTROL_PLANE_ID=softcloud-lab-01 \
   SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
   sh scripts/provision_freebsd_jail_node.sh jail-node-01
 ```
 
-Cloud-init installs `wireguard-tools`, persists and loads `if_wg`, enables the base-system jail service, and creates `/usr/local/jails`, `/etc/jail.conf.d`, and `/usr/local/etc/wireguard`. It does not generate WireGuard keys, invent peer addresses or routes, or create a jail. Supply those definitions separately.
+Three-node topology:
 
-After the guest boots, verify completion inside the guest with:
+```sh
+sudo PGDATABASE=inventory \
+  PGUSER=postgres \
+  IPAM_POOL=vm-lan \
+  CONTROL_PLANE_ID=softcloud-lab-01 \
+  SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
+  sh scripts/provision_freebsd_jail_cluster.sh
+```
+
+The profile installs WireGuard tooling and enables native jails. It does not create keys, peers, routes, or jail definitions.
+
+Inside a guest:
 
 ```sh
 sudo cloud-init status --wait
@@ -74,36 +65,30 @@ wg --version
 sysrc jail_enable
 ```
 
-Provision the three-node topology `jail-node-01` through `jail-node-03`:
+The host bridge uses MTU 1496. Do not encode runtime tap numbers or bhyve process IDs into automation.
+
+## Change an existing guest loader
 
 ```sh
-sudo PGDATABASE=inventory \
-  PGUSER=postgres \
-  IPAM_POOL=vm-lan \
-  VM_OWNER=admin \
-  CLOUD_INIT_USER=admin \
-  CONTROL_PLANE_ID=softcloud-lab-01 \
-  SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
-  sh scripts/provision_freebsd_jail_cluster.sh
+sudo sh scripts/migrate_vm_to_bhyveload.sh db-node-03
 ```
 
-The host keeps `bridge0` at MTU 1496 and vm-bhyve switch `public` uses that bridge. Kea advertises MTU 1496 to DHCP clients. vm-bhyve assigns tap interface numbers and process IDs at runtime; do not encode `tap0`-`tap2` or specific PIDs into automation.
+The script restores the previous configuration and loader if the guarded restart fails.
 
-## Deprovision a VM
-
-```sh
-sudo PGDATABASE=inventory \
-  PGUSER=postgres \
-  sh scripts/deprovision_vm.sh db-node-01
-```
-
-Or use the Make target:
+## Deprovision
 
 ```sh
 sudo make deprovision-vm VM_NAME=db-node-01
 ```
 
-The command authenticates to Kea, deletes the reservation from the PostgreSQL hosts backend, attempts to delete the active lease, destroys the guest when present, archives the active inventory row by UUID, and releases the address. `rollback_vm.sh` remains the underlying transactional implementation.
+Equivalent direct command:
+
+```sh
+sudo PGDATABASE=inventory PGUSER=postgres \
+  sh scripts/deprovision_vm.sh db-node-01
+```
+
+Deprovisioning removes the Kea reservation and active lease when present, destroys the guest, archives the inventory row by UUID, and releases the IP allocation. Missing guest or reservation state is tolerated to support stale-state cleanup.
 
 ## Inspect state
 
@@ -114,13 +99,12 @@ container list 2>/dev/null || true
 sudo -u postgres psql -d inventory -c 'TABLE vms;'
 sudo -u postgres psql -d inventory -c 'TABLE ipam_leases;'
 pfctl -sr
-pfctl -a 'blacklistd/*' -sr
 sockstat -4 -6 -l
 service unbound status
 drill @10.0.20.1 freebsd.org
 ```
 
-Inspect the reservation backend through the authenticated loopback API. Replace subnet ID `1` when the selected pool uses another Kea subnet:
+Query database-backed Kea reservations for subnet `1`:
 
 ```sh
 KEA_API_USER=$(sed -n '1p' /usr/local/etc/kea/kea-api-user)
@@ -142,40 +126,36 @@ curl -fsS \
   http://127.0.0.1:8000/ | jq .
 ```
 
-Do not hard-code the password in scripts or shell history. `curl --user` receives the expanded credential in its local process arguments, so run this diagnostic only on the trusted loopback host. Use a protected curl configuration file or another credential helper when local process inspection is part of the threat model.
+Use the subnet ID stored in `ipam_pools`. `curl --user` exposes the expanded credential to local process inspection, so run this only on the trusted host or use a protected curl configuration file.
 
 ## Service management
-
-Manage control-plane service containers and native services:
 
 ```sh
 sh scripts/start_services.sh
 container list
 jls
-jexec postgres psql -U postgres -d inventory
-jexec kea kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
 service stork_server status
 service stork_agent status
 service unbound status
 ```
 
-The native FreeBSD agent is installed and registered directly; `/stork-install-agent.sh` distributes the pinned `.deb`, `.rpm`, or `.apk` package to remote Linux machines. Repair the served package set with `make install-stork-agent-packages STORK_AGENT_PACKAGE_ARCH=amd64` or `arm64`.
-
-The Stork dashboard is at `http://MGMT_ADDR:8080` from both management and the VM LAN. Its database and the Kea hosts database are separate from `inventory`. Back them up with:
+Validate service configuration inside jails when applicable:
 
 ```sh
-sudo -u postgres pg_dump -Fc stork > stork.dump
-sudo -u postgres pg_dump -Fc kea_hosts > kea-hosts.dump
+jexec postgres psql -U postgres -d inventory
+jexec kea kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
 ```
 
-## Failure handling and reconciliation
+Stork uses separate `stork` and `kea_hosts` databases. Back them up independently from `inventory`.
 
-If provisioning is interrupted after an external side effect, inspect every state domain before retrying:
+## Recover interrupted provisioning
+
+Set the affected name and inspect each state domain:
 
 ```sh
 VM_NAME=db-node-01
-vm info "$VM_NAME" || true
 
+vm info "$VM_NAME" || true
 sudo -u postgres psql -d inventory -x -c \
   "SELECT v.*, p.kea_subnet_id
      FROM vms v
@@ -186,67 +166,66 @@ sudo -u postgres psql -d inventory -x -c \
 sudo -u postgres psql -d inventory -x -c \
   "SELECT l.*
      FROM ipam_leases l
-     JOIN vms v ON v.pool_id = l.pool_id AND v.ip_address = l.ip_address
+     JOIN vms v ON v.pool_id = l.pool_id
+              AND v.ip_address = l.ip_address
     WHERE v.name = '${VM_NAME}'
     ORDER BY l.allocated_at DESC;"
 
-jls
 zfs list -r zroot/vm | grep "$VM_NAME" || true
 ```
 
-Use the authenticated reservation query from the previous section with the inventory row's `kea_subnet_id`. Compare the returned MAC and address with the active inventory row and vm-bhyve configuration.
+Then compare inventory with:
 
-Do not reuse an IP address until the active inventory row, IPAM lease, Kea reservation, active DHCP lease, vm-bhyve guest, and guest zvol are reconciled. For a normal stale-state cleanup, prefer:
+- the vm-bhyve guest and MAC configuration;
+- the IPAM lease;
+- the PostgreSQL-backed Kea reservation;
+- any active DHCP lease;
+- the guest zvol and seed image.
+
+Do not reuse an address until all state agrees. For ordinary stale-state cleanup, run deprovisioning instead of editing databases manually.
+
+A reconciliation job should report at least:
+
+- inventory without a guest;
+- guest without inventory;
+- inventory without a Kea reservation;
+- Kea reservation without inventory;
+- released IPAM address with an active reservation or lease;
+- independent inventories using the same `CONTROL_PLANE_ID`.
+
+## Cloud-image cache
+
+Validate or repair the cache by rerunning:
 
 ```sh
-sudo PGDATABASE=inventory PGUSER=postgres \
-  sh scripts/deprovision_vm.sh "$VM_NAME"
+sudo make fetch-cloud-image
 ```
 
-A host crash can occur before shell traps run. Periodic reconciliation should therefore report, rather than silently repair, at least these mismatches:
-
-- active inventory row without a vm-bhyve guest;
-- vm-bhyve guest without an active inventory row;
-- active inventory address without a PostgreSQL-backed Kea reservation;
-- Kea reservation without an active inventory row;
-- released IPAM address still present in an active reservation or lease;
-- duplicate control-plane namespaces used by independent inventories.
-
-## Cloud-image cache maintenance
-
-The default cache consists of:
+Default files:
 
 ```text
 /var/cache/control-plane/freebsd-cloud.raw
 /var/cache/control-plane/freebsd-cloud.raw.verified
 ```
 
-Validate or repair it by rerunning:
+The fetcher reuses the raw image only when its source and digest match the marker. To rotate images, update the URL and optional pinned digest together, refresh the cache, and test a disposable guest.
 
-```sh
-sudo make fetch-cloud-image
-```
-
-The fetcher reuses the cache only when the marker source and raw digest match. To rotate to a new image, update the URL and optional pinned digest together, run `make fetch-cloud-image`, and provision a disposable guest before adopting it for production workloads.
-
-Do not manually edit the `.verified` marker. Removing both files is safe when no provisioning process is using the cache; the next fetch recreates them atomically.
+Do not edit the marker manually. Both cache files may be removed when no provisioning process is using them; the next fetch recreates them atomically.
 
 ## Backups
 
 Back up:
 
 - `/etc/rc.conf`, `/etc/pf.conf`, `/etc/jail.conf`, `/etc/ssh`, and `/etc/blacklistd.conf`;
-- `/usr/local/etc/kea`, including API and hosts-database credential files;
-- `/usr/local/etc/unbound`;
-- `/usr/local/etc/stork`, `/var/lib/stork-agent`, and the Stork PostgreSQL database;
-- the Kea PostgreSQL hosts database;
-- PostgreSQL inventory and IPAM state using `pg_dump`;
+- `/usr/local/etc/kea`, `/usr/local/etc/unbound`, and `/usr/local/etc/stork`;
+- PostgreSQL databases `inventory`, `kea_hosts`, and `stork`;
+- `/var/lib/stork-agent`;
 - vm-bhyve templates and guest definitions;
 - ZFS snapshots and replication targets;
-- SSH host keys and future SSH CA trust anchors;
-- site-controlled image URLs, pinned digests, and `CONTROL_PLANE_ID` values.
+- SSH host keys and future CA trust anchors;
+- site-controlled image URLs, pinned digests, and `CONTROL_PLANE_ID`.
 
-The cloud-image cache itself is reproducible and need not be backed up when the source URL and digest policy are recorded.
+The verified cloud-image cache is reproducible and does not need backup when its source and digest policy are recorded.
 
 ## Change control
 
@@ -259,4 +238,4 @@ make validate-freebsd
 pfctl -nf /etc/pf.conf
 ```
 
-After service or schema changes, verify the authenticated Kea API, PostgreSQL inventory, reservation backend, and one disposable guest lifecycle before production provisioning.
+After schema or service changes, verify the authenticated Kea API and complete one disposable provision/deprovision cycle before production use.
