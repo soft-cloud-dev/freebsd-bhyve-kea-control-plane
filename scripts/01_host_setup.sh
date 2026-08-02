@@ -8,6 +8,7 @@ MGMT_USER="${MGMT_USER:-admin}"
 EXT_IF="${EXT_IF:-igb0}"
 MGMT_IF="${MGMT_IF:-vlan10}"
 LAN_IF="${LAN_IF:-bridge0}"
+LAN_MTU="${LAN_MTU:-1496}"
 MGMT_ADDR="${MGMT_ADDR:-10.0.10.2}"
 MGMT_VLAN="${MGMT_VLAN:-10}"
 LAN_ADDR="${LAN_ADDR:-10.0.20.1}"
@@ -39,6 +40,11 @@ esac
 case "${MGMT_GROUP}" in
     ''|*[!A-Za-z0-9_-]*) die "invalid management group: ${MGMT_GROUP}" ;;
 esac
+case "${LAN_MTU}" in
+    ''|*[!0-9]*) die "invalid LAN MTU: ${LAN_MTU}" ;;
+esac
+[ "${LAN_MTU}" -ge 1280 ] && [ "${LAN_MTU}" -le 9000 ] || \
+    die "LAN MTU must be between 1280 and 9000"
 
 ADMIN_KEY=$(resolve_admin_key)
 case "${ADMIN_KEY}" in
@@ -150,8 +156,10 @@ if command -v ifconfig >/dev/null 2>&1; then
     fi
     if ! ifconfig "${LAN_IF}" >/dev/null 2>&1; then
         echo "[*] Creating ${LAN_IF}"
-        ifconfig "${LAN_IF}" create inet "${LAN_ADDR}/24" mtu 1496 up || true
+        ifconfig "${LAN_IF}" create inet "${LAN_ADDR}/24" mtu "${LAN_MTU}" up || true
     fi
+    ifconfig "${LAN_IF}" mtu "${LAN_MTU}" up || \
+        die "could not enforce MTU ${LAN_MTU} on ${LAN_IF}"
 fi
 
 if command -v sysrc >/dev/null 2>&1; then
@@ -166,7 +174,7 @@ if command -v sysrc >/dev/null 2>&1; then
         esac
     done
     sysrc "ifconfig_${MGMT_IF}=inet ${MGMT_ADDR}/24 vlan ${MGMT_VLAN} vlandev ${EXT_IF} mtu 1496" >/dev/null 2>&1 || true
-    sysrc "ifconfig_${LAN_IF}=inet ${LAN_ADDR}/24 mtu 1496 up" >/dev/null 2>&1 || true
+    sysrc "ifconfig_${LAN_IF}=inet ${LAN_ADDR}/24 mtu ${LAN_MTU} up" >/dev/null 2>&1 || true
     sysrc gateway_enable=YES >/dev/null
 fi
 

@@ -61,6 +61,7 @@ scripts/
   init_stork.sh
   install_stork.sh
   deprovision_vm.sh
+  provision_freebsd_jail_cluster.sh
   provision_freebsd_jail_node.sh
   provision_vm.sh
   rollback_vm.sh

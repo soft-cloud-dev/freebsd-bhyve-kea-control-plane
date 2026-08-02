@@ -15,6 +15,7 @@ DEPROVISION_SCRIPT="${DEPROVISION_SCRIPT:-${ROOT}/scripts/deprovision_vm.sh}"
 VM_TEMPLATE="${VM_TEMPLATE:-${ROOT}/templates/vm-bhyve.conf}"
 VM_LOADER_MIGRATION_SCRIPT="${VM_LOADER_MIGRATION_SCRIPT:-${ROOT}/scripts/migrate_vm_to_bhyveload.sh}"
 FREEBSD_JAIL_PROVISION_SCRIPT="${FREEBSD_JAIL_PROVISION_SCRIPT:-${ROOT}/scripts/provision_freebsd_jail_node.sh}"
+FREEBSD_JAIL_CLUSTER_SCRIPT="${FREEBSD_JAIL_CLUSTER_SCRIPT:-${ROOT}/scripts/provision_freebsd_jail_cluster.sh}"
 FREEBSD_JAIL_PROFILE="${FREEBSD_JAIL_PROFILE:-${ROOT}/config/cloud-init/freebsd-jail-node.yaml}"
 
 . "${ROOT}/scripts/lib.sh"
@@ -27,6 +28,7 @@ FREEBSD_JAIL_PROFILE="${FREEBSD_JAIL_PROFILE:-${ROOT}/config/cloud-init/freebsd-
 [ -r "$VM_TEMPLATE" ] || die "missing vm-bhyve template"
 [ -r "$VM_LOADER_MIGRATION_SCRIPT" ] || die "missing VM loader migration script"
 [ -r "$FREEBSD_JAIL_PROVISION_SCRIPT" ] || die "missing FreeBSD jail-node provisioner"
+[ -r "$FREEBSD_JAIL_CLUSTER_SCRIPT" ] || die "missing FreeBSD jail-cluster provisioner"
 [ -r "$FREEBSD_JAIL_PROFILE" ] || die "missing FreeBSD jail-node cloud-init profile"
 
 grep -Eq 'git clone --depth 1 https://git.FreeBSD.org/ports.git' "$DEPENDENCY_SCRIPT" || \
@@ -93,6 +95,19 @@ grep -Eq 'kld_list\+=if_wg' "$FREEBSD_JAIL_PROFILE" || \
     die "FreeBSD jail-node profile does not persist the WireGuard kernel module"
 grep -Eq 'CLOUD_INIT_EXTRA_FILE' "$PROVISION_SCRIPT" || \
     die "VM provisioner does not support a cloud-init extension"
+grep -Eq 'JAIL_NODE_COUNT.*:-3' "$FREEBSD_JAIL_CLUSTER_SCRIPT" || \
+    die "FreeBSD jail-cluster provisioner does not default to three nodes"
+grep -Eq "printf '%02d'" "$FREEBSD_JAIL_CLUSTER_SCRIPT" || \
+    die "FreeBSD jail-cluster provisioner does not use stable two-digit node names"
+preflight_loop=$(grep -n 'active_count=.*psql' "$FREEBSD_JAIL_CLUSTER_SCRIPT" | sed -n '1s/:.*//p')
+provision_loop=$(grep -n '^provisioned_names=' "$FREEBSD_JAIL_CLUSTER_SCRIPT" | sed -n '1s/:.*//p')
+[ -n "$preflight_loop" ] && [ -n "$provision_loop" ] && [ "$preflight_loop" -lt "$provision_loop" ] || \
+    die "FreeBSD jail-cluster inventory preflight must complete before provisioning"
+jq -e '
+    .Dhcp4.subnet4[0]["option-data"]
+    | any(.name == "interface-mtu" and .data == "1496")
+' "$DHCP4_CONF" >/dev/null || \
+    die "Kea does not advertise the bridge MTU to VM guests"
 
 preflight_dir=$(mktemp -d)
 trap 'rm -rf "$preflight_dir"' EXIT HUP INT TERM

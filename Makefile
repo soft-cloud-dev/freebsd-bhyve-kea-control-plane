@@ -3,6 +3,7 @@ SHELL = /bin/sh
 EXT_IF ?= igb0
 MGMT_IF ?= vlan10
 LAN_IF ?= bridge0
+LAN_MTU ?= 1496
 MGMT_ADDR ?= 10.0.10.2
 MGMT_NET ?= 10.0.10.0/24
 LAN_NET ?= 10.0.20.0/24
@@ -47,7 +48,7 @@ STORK_DB_PASSWORD_FILE ?= /usr/local/etc/stork/database-password
 STORK_READY_TIMEOUT ?= 60
 VM_NAME ?=
 
-SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/deprovision_vm.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/migrate_vm_to_bhyveload.sh scripts/provision_freebsd_jail_node.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
+SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/deprovision_vm.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/migrate_vm_to_bhyveload.sh scripts/provision_freebsd_jail_cluster.sh scripts/provision_freebsd_jail_node.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
 TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh
 
 .NOTPARALLEL:
@@ -97,7 +98,7 @@ install-stork-agent-packages:
 	@STORK_VERSION="${STORK_VERSION}" STORK_AGENT_PACKAGES_ENABLE="${STORK_AGENT_PACKAGES_ENABLE}" STORK_AGENT_PACKAGE_ARCH="${STORK_AGENT_PACKAGE_ARCH}" sh scripts/install_stork_agent_packages.sh
 
 configure-host:
-	@EXT_IF="${EXT_IF}" MGMT_IF="${MGMT_IF}" LAN_IF="${LAN_IF}" MGMT_ADDR="${MGMT_ADDR}" VM_DATASET="${VM_DATASET}" MGMT_GROUP="${MGMT_GROUP}" MGMT_USER="${MGMT_USER}" SSH_ADMIN_KEY_FILE="${SSH_ADMIN_KEY_FILE}" SSH_ADMIN_AUTHORIZED_KEY="${SSH_ADMIN_AUTHORIZED_KEY}" sh scripts/01_host_setup.sh
+	@EXT_IF="${EXT_IF}" MGMT_IF="${MGMT_IF}" LAN_IF="${LAN_IF}" LAN_MTU="${LAN_MTU}" MGMT_ADDR="${MGMT_ADDR}" VM_DATASET="${VM_DATASET}" MGMT_GROUP="${MGMT_GROUP}" MGMT_USER="${MGMT_USER}" SSH_ADMIN_KEY_FILE="${SSH_ADMIN_KEY_FILE}" SSH_ADMIN_AUTHORIZED_KEY="${SSH_ADMIN_AUTHORIZED_KEY}" sh scripts/01_host_setup.sh
 
 configure-services:
 	@EXT_IF="${EXT_IF}" MGMT_IF="${MGMT_IF}" LAN_IF="${LAN_IF}" MGMT_NET="${MGMT_NET}" LAN_NET="${LAN_NET}" MGMT_ADDR="${MGMT_ADDR}" DNS_ADDR="${DNS_ADDR}" KEA_API_USER="${KEA_API_USER}" KEA_API_USER_FILE="${KEA_API_USER_FILE}" KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE}" KEA_HOST_DB_NAME="${KEA_HOST_DB_NAME}" KEA_HOST_DB_USER="${KEA_HOST_DB_USER}" KEA_HOST_DB_PASSWORD_FILE="${KEA_HOST_DB_PASSWORD_FILE}" POSTGRES_EXPORTER_DSN="${POSTGRES_EXPORTER_DSN}" STORK_ENABLE="${STORK_ENABLE}" STORK_DB_NAME="${STORK_DB_NAME}" STORK_DB_USER="${STORK_DB_USER}" STORK_DB_PASSWORD_FILE="${STORK_DB_PASSWORD_FILE}" sh scripts/configure_services.sh
@@ -115,7 +116,7 @@ init-ipam:
 	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" IPAM_POOL="${IPAM_POOL}" IPAM_SUBNET="${IPAM_SUBNET}" IPAM_FIRST_HOST="${IPAM_FIRST_HOST}" IPAM_LAST_HOST="${IPAM_LAST_HOST}" IPAM_VLAN="${IPAM_VLAN}" KEA_SUBNET_ID="${KEA_SUBNET_ID}" sh scripts/03_init_ipam.sh
 
 init-vm:
-	@VM_DIR="${VM_DIR}" VM_DATASET="${VM_DATASET}" LAN_IF="${LAN_IF}" sh scripts/init_vm.sh
+	@VM_DIR="${VM_DIR}" VM_DATASET="${VM_DATASET}" LAN_IF="${LAN_IF}" LAN_MTU="${LAN_MTU}" sh scripts/init_vm.sh
 
 deprovision: deprovision-vm
 

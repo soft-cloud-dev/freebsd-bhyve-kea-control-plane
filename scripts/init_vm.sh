@@ -6,6 +6,17 @@ require_root
 
 VM_DATASET="${VM_DATASET:-zroot/vm}"
 LAN_IF="${LAN_IF:-bridge0}"
+LAN_MTU="${LAN_MTU:-1496}"
+
+case "$LAN_MTU" in
+    ''|*[!0-9]*) die "invalid LAN MTU: $LAN_MTU" ;;
+esac
+[ "$LAN_MTU" -ge 1280 ] && [ "$LAN_MTU" -le 9000 ] || \
+    die "LAN MTU must be between 1280 and 9000"
+
+ifconfig "$LAN_IF" >/dev/null 2>&1 || die "missing vm-bhyve bridge: $LAN_IF"
+ifconfig "$LAN_IF" mtu "$LAN_MTU" up || \
+    die "could not enforce MTU $LAN_MTU on $LAN_IF"
 
 if command -v zfs >/dev/null 2>&1 && zfs list -H -o name "${VM_DATASET}" >/dev/null 2>&1; then
     vm_root=$(zfs get -H -o value mountpoint "${VM_DATASET}" 2>/dev/null || echo "")

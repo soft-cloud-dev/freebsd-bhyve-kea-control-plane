@@ -70,6 +70,22 @@ wg --version
 sysrc jail_enable
 ```
 
+Provision the three-node topology `jail-node-01` through `jail-node-03`:
+
+```sh
+sudo PGDATABASE=inventory \
+  PGUSER=postgres \
+  IPAM_POOL=vm-lan \
+  VM_OWNER=admin \
+  CLOUD_INIT_USER=admin \
+  SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
+  sh scripts/provision_freebsd_jail_cluster.sh
+```
+
+The host keeps `bridge0` at MTU 1496 and vm-bhyve switch `public` uses that bridge. Kea advertises
+MTU 1496 to DHCP clients. vm-bhyve assigns tap interface numbers and process IDs at runtime; do not
+encode `tap0`–`tap2` or specific PIDs into automation.
+
 ## Deprovision a VM
 
 ```sh
