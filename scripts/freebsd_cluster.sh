@@ -249,6 +249,9 @@ esac
 case "$CLUSTER_SSH_USER" in
     ''|*[!a-z0-9_-]*|[0-9-]*) die "invalid cluster SSH user: $CLUSTER_SSH_USER" ;;
 esac
+if [ "$KUBECTL_BOOTSTRAP" = yes ] && [ -z "$KUBECONFIG_DEST" ]; then
+    die "KUBECONFIG_DEST must not be empty when kubectl bootstrap is enabled"
+fi
 
 require_commands install mktemp
 [ -r "$CLUSTER_PROFILE_FILE" ] || die "cluster cloud-init profile is not readable: $CLUSTER_PROFILE_FILE"
@@ -271,12 +274,17 @@ created_nodes=""
 rollback_cluster() {
     rollback_status=$?
     trap - EXIT INT TERM HUP
-    if [ "$rollback_status" -ne 0 ] && [ -n "$created_nodes" ]; then
-        echo "[!] Cluster provisioning failed; removing nodes created by this run" >&2
-        for rollback_name in $created_nodes; do
-            sh "$CLUSTER_NODE_DEPROVISIONER" "$rollback_name" >/dev/null 2>&1 || \
-                echo "WARNING: failed to deprovision ${rollback_name}" >&2
-        done
+    if [ "$rollback_status" -ne 0 ]; then
+        if [ -n "$created_nodes" ]; then
+            echo "[!] Cluster provisioning failed; removing nodes created by this run" >&2
+            for rollback_name in $created_nodes; do
+                sh "$CLUSTER_NODE_DEPROVISIONER" "$rollback_name" >/dev/null 2>&1 || \
+                    echo "WARNING: failed to deprovision ${rollback_name}" >&2
+            done
+        fi
+        rm -f \
+            "${CLUSTER_STATE_DIR}/${CLUSTER_NODE_PREFIX}.tsv" \
+            "${CLUSTER_STATE_DIR}/${CLUSTER_NODE_PREFIX}.known_hosts"
     fi
     exit "$rollback_status"
 }
