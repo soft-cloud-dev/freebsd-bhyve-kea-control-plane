@@ -166,15 +166,15 @@ VALUES ($1, $2, $3, $4, 'present', $5, NULLIF($6, ''))`, resourceUUID, generatio
 }
 
 func ensureAllocation(ctx context.Context, tx pgx.Tx, site config.Site, pool config.Pool, image config.Image, resourceUUID, resourceName string, generation uint64) (state.Allocation, error) {
-	allocated, err := loadAllocationTx(ctx, tx, resourceUUID)
-	if err == nil && allocated.ReleasedAt == nil {
+	allocated, loadErr := loadAllocationTx(ctx, tx, resourceUUID)
+	if loadErr == nil && allocated.ReleasedAt == nil {
 		if allocated.PoolName != pool.Name || allocated.ImageName != image.Name {
 			return state.Allocation{}, fmt.Errorf("%w: changing pool or image requires explicit replacement", state.ErrBlocked)
 		}
 		return allocated, nil
 	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return state.Allocation{}, err
+	if loadErr != nil && !errors.Is(loadErr, pgx.ErrNoRows) {
+		return state.Allocation{}, loadErr
 	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "bkcp:pool:"+site.ControlPlaneID+":"+pool.Name); err != nil {
 		return state.Allocation{}, fmt.Errorf("lock pool: %w", err)
@@ -213,7 +213,7 @@ func ensureAllocation(ctx context.Context, tx pgx.Tx, site config.Site, pool con
 		return state.Allocation{}, allocation.ErrExhausted
 	}
 	allocated = state.Allocation{PoolName: pool.Name, IPAddress: ipAddress, MACAddress: macAddress, DatasetName: allocation.Dataset(site.Host.VMDataset, resourceName), ZvolName: allocation.Zvol(site.Host.VMDataset, resourceName), KeaSubnetID: pool.KeaSubnetID, ImageName: image.Name, ImageDigest: image.CompressedSHA256, AllocationGeneration: generation}
-	if err == nil {
+	if loadErr == nil {
 		_, err = tx.Exec(ctx, `
 UPDATE bkcp.vm_allocations SET pool_name=$2, ip_address=$3::inet, mac_address=$4::macaddr, dataset_name=$5, zvol_name=$6, kea_subnet_id=$7, image_name=$8, image_digest=$9, allocation_generation=$10, allocated_at=CURRENT_TIMESTAMP, released_at=NULL
 WHERE resource_uuid=$1`, resourceUUID, allocated.PoolName, allocated.IPAddress, allocated.MACAddress, allocated.DatasetName, allocated.ZvolName, allocated.KeaSubnetID, allocated.ImageName, allocated.ImageDigest, allocated.AllocationGeneration)
