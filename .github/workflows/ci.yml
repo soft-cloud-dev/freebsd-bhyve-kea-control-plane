@@ -51,10 +51,14 @@ jobs:
 
       - name: Reject committed secrets
         run: |
+          private_key_prefix='BEGIN'
+          ssh_key_type='ssh-ed25519'
+          postgres_scheme='postgresql'
+          secret_pattern="(${private_key_prefix} (RSA|OPENSSH|EC) PRIVATE KEY|${ssh_key_type} AAAA[[:alnum:]+/]{20,}|${postgres_scheme}://[^[:space:]]+:[^[:space:]@]+@)"
           if grep -RInE \
             --exclude-dir=.git \
             --exclude='*.md' \
-            '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ssh-ed25519 AAAA[[:alnum:]+/]{20,}|postgresql://[^[:space:]]+:[^[:space:]@]+@)' \
+            "$secret_pattern" \
             .; then
             echo 'Potential secret material detected.' >&2
             exit 1
