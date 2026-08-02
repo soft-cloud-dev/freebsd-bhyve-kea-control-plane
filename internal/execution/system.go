@@ -395,17 +395,15 @@ func (d *SystemDriver) ensurePFAbsent(ctx context.Context, input planner.StepInp
 
 func (d *SystemDriver) observe(ctx context.Context, input planner.StepInput, expectAbsent bool) (Result, error) {
 	vmExists, running, vmErr := d.vmState(ctx, input.Resource)
-	storageExists := false
-	storageErr := error(nil)
-	if _, err := d.Runner.Run(ctx, "zfs", "list", "-H", "-o", "name", input.Allocation.ZvolName); err == nil {
-		storageExists = true
-	} else {
-		storageErr = err
-	}
+	storageExists, storageErr := d.zfsExists(ctx, input.Allocation.ZvolName)
 	keaExists, keaResponse, keaErr := d.keaReservation(ctx, input)
 	seedPath := filepath.Join(input.Host.VMRoot, input.Resource, "seed.iso")
 	_, seedErr := os.Stat(seedPath)
 	seedExists := seedErr == nil
+	if errors.Is(seedErr, os.ErrNotExist) {
+		seedErr = nil
+	}
+
 	vmState := presence(vmExists, vmErr)
 	storageState := presence(storageExists, storageErr)
 	keaState := presence(keaExists, keaErr)
@@ -420,7 +418,22 @@ func (d *SystemDriver) observe(ctx context.Context, input planner.StepInput, exp
 			power = "stopped"
 		}
 	}
-	observation := &state.Observation{ObserverVersion: "cpctl-v2", VMState: vmState, StorageState: storageState, KeaState: keaState, SeedState: seedState, PowerState: power, Observed: map[string]any{"vm": input.Resource, "ip": input.Allocation.IPAddress, "mac": input.Allocation.MACAddress, "kea": keaResponse}}
+
+	observation := &state.Observation{
+		ObserverVersion: "cpctl-v2",
+		VMState:         vmState, StorageState: storageState, KeaState: keaState, SeedState: seedState, PowerState: power,
+		Observed: map[string]any{
+			"vm": input.Resource, "ip": input.Allocation.IPAddress, "mac": input.Allocation.MACAddress,
+			"kea": keaResponse, "seed_path": seedPath, "zvol": input.Allocation.ZvolName,
+		},
+	}
+
+	if unavailableErr := firstObservationError(vmErr, storageErr, keaErr, seedErr); unavailableErr != nil {
+		observation.ErrorCode = "observer_unavailable"
+		observation.ErrorDetail = unavailableErr.Error()
+		return Result{Observation: observation, Postcondition: observation.Observed}, fmt.Errorf("observation unavailable: %w", unavailableErr)
+	}
+
 	if expectAbsent {
 		if vmExists || storageExists || keaExists || seedExists {
 			return Result{Observation: observation, Postcondition: observation.Observed}, fmt.Errorf("%w: delete postcondition is not absent", state.ErrDrift)
@@ -432,6 +445,27 @@ func (d *SystemDriver) observe(ctx context.Context, input planner.StepInput, exp
 		}
 	}
 	return Result{Observation: observation, Postcondition: observation.Observed}, nil
+}
+
+func (d *SystemDriver) zfsExists(ctx context.Context, name string) (bool, error) {
+	_, err := d.Runner.Run(ctx, "zfs", "list", "-H", "-o", "name", name)
+	if err == nil {
+		return true, nil
+	}
+	lower := strings.ToLower(err.Error())
+	if strings.Contains(lower, "dataset does not exist") || strings.Contains(lower, "cannot open") || strings.Contains(lower, "does not exist") {
+		return false, nil
+	}
+	return false, err
+}
+
+func firstObservationError(errorsToCheck ...error) error {
+	for _, err := range errorsToCheck {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (d *SystemDriver) vmState(ctx context.Context, name string) (bool, bool, error) {
