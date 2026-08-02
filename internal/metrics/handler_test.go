@@ -107,3 +107,17 @@ func TestExporterReadinessUsesPostgreSQLPing(t *testing.T) {
 		t.Fatalf("ready status = %d", response.Code)
 	}
 }
+
+func TestExporterRejectsMutationMethods(t *testing.T) {
+	exporter := NewExporter(fakeSource{}, "test", time.Second)
+	request := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	response := httptest.NewRecorder()
+	exporter.ServeHTTP(response, request)
+
+	if response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d", response.Code)
+	}
+	if response.Header().Get("Allow") != "GET, HEAD" {
+		t.Fatalf("allow = %q", response.Header().Get("Allow"))
+	}
+}
