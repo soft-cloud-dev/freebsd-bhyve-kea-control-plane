@@ -79,6 +79,25 @@ Deprovision:
 sudo make deprovision-vm VM_NAME=db-node-01
 ```
 
+## Provision three FreeBSD nodes
+
+One command provisions `freebsd-node-01` through `freebsd-node-03`, waits for cloud-init readiness over SSH, writes a TSV inventory, and bootstraps the local `kubectl` client:
+
+```sh
+sudo make cluster-up \
+  CONTROL_PLANE_ID=softcloud-lab-01 \
+  SSH_PUBLIC_KEY_FILE=/root/.ssh/id_ed25519.pub \
+  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519 \
+  KUBECONFIG_SOURCE=/root/kubeconfig
+```
+
+`KUBECONFIG_SOURCE` is optional. When supplied, it is installed as `/root/.kube/config` and verified with `kubectl cluster-info`. The FreeBSD guests are prepared for native jails and WireGuard; this workflow does not install `kubelet` or `kubeadm` on them.
+
+```sh
+sudo make cluster-status
+sudo make cluster-down
+```
+
 Operational commands and failure recovery are in [`docs/operations.md`](docs/operations.md).
 
 ## Validate
