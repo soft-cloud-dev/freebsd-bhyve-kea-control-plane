@@ -13,11 +13,17 @@ type fakeRepository struct {
 	steps      []state.OperationStep
 	claimed    []int
 	completed  []int
+	locked     bool
+	unlocked   bool
 	finished   bool
 }
 
 func (f *fakeRepository) InspectResource(context.Context, string) (state.Inspection, error) {
 	return f.inspection, nil
+}
+func (f *fakeRepository) LockExecution(context.Context, string) (func(), error) {
+	f.locked = true
+	return func() { f.unlocked = true }, nil
 }
 func (f *fakeRepository) StartOperation(context.Context, string) error { return nil }
 func (f *fakeRepository) ExecutionSteps(context.Context, string) ([]state.OperationStep, error) {
@@ -84,6 +90,9 @@ func TestExecutorResumesAtFirstIncompleteStep(t *testing.T) {
 	if len(repo.claimed) != 1 || repo.claimed[0] != 2 || !repo.finished {
 		t.Fatalf("repo state: %#v", repo)
 	}
+	if !repo.locked || !repo.unlocked {
+		t.Fatalf("execution lock was not held and released: %#v", repo)
+	}
 }
 
 func TestExecutorBlocksTamperedInput(t *testing.T) {
@@ -99,5 +108,8 @@ func TestExecutorBlocksTamperedInput(t *testing.T) {
 	_, err = (Executor{Repository: repo, Driver: &fakeDriver{}}).Run(context.Background(), "node-01")
 	if err == nil {
 		t.Fatal("expected tampered input to fail")
+	}
+	if !repo.unlocked {
+		t.Fatal("execution lock was not released after failure")
 	}
 }
