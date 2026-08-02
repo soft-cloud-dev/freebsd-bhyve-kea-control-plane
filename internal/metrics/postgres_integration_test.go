@@ -47,17 +47,44 @@ RETURNING uuid::text`).Scan(&resourceUUID); err != nil {
 	digest := strings.Repeat("a", 64)
 	planDigest := strings.Repeat("b", 64)
 	idempotencyKey := strings.Repeat("c", 64)
-	if _, err := conn.Exec(ctx, `
+
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{
+			query: `
 INSERT INTO bkcp.vm_specs(resource_uuid, generation, normalized_spec, spec_digest, desired_presence, desired_power)
-VALUES ($1, 1, '{"name":"node-01","image":"freebsd-14.4","pool":"vm-lan","desired_power":"running"}', $2, 'present', 'running');
-UPDATE bkcp.resources SET current_generation = 1 WHERE uuid = $1;
+VALUES ($1, 1, '{"name":"node-01","image":"freebsd-14.4","pool":"vm-lan","desired_power":"running"}', $2, 'present', 'running')`,
+			args: []any{resourceUUID, digest},
+		},
+		{
+			query: `UPDATE bkcp.resources SET current_generation = 1 WHERE uuid = $1`,
+			args:  []any{resourceUUID},
+		},
+		{
+			query: `
 INSERT INTO bkcp.vm_allocations(resource_uuid, pool_name, ip_address, mac_address, dataset_name, zvol_name, kea_subnet_id, image_name, image_digest, allocation_generation)
-VALUES ($1, 'vm-lan', '10.0.20.10', '02:00:00:00:00:01', 'zroot/vm/node-01', 'zroot/vm/node-01/disk0', 1, 'freebsd-14.4', $2, 1);
+VALUES ($1, 'vm-lan', '10.0.20.10', '02:00:00:00:00:01', 'zroot/vm/node-01', 'zroot/vm/node-01/disk0', 1, 'freebsd-14.4', $2, 1)`,
+			args: []any{resourceUUID, digest},
+		},
+		{
+			query: `
 INSERT INTO bkcp.vm_effective(resource_uuid, state, current_plan_digest, last_successful_reconciliation_at)
-VALUES ($1, 'converged', $3, CURRENT_TIMESTAMP);
+VALUES ($1, 'converged', $2, CURRENT_TIMESTAMP)`,
+			args: []any{resourceUUID, planDigest},
+		},
+		{
+			query: `
 INSERT INTO bkcp.vm_observations(resource_uuid, observer_version, vm_state, storage_state, kea_state, seed_state, image_state, pf_state, power_state, observed, plan_digest)
-VALUES ($1, 'test', 'present', 'present', 'present', 'present', 'present', 'present', 'running', '{}', $3)`, resourceUUID, digest, planDigest); err != nil {
-		t.Fatal(err)
+VALUES ($1, 'test', 'present', 'present', 'present', 'present', 'present', 'present', 'running', '{}', $2)`,
+			args: []any{resourceUUID, planDigest},
+		},
+	}
+	for _, statement := range statements {
+		if _, err := conn.Exec(ctx, statement.query, statement.args...); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	var operationUUID string
