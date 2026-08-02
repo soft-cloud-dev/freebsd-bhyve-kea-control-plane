@@ -10,6 +10,15 @@ FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256:-}"
 FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL:-${FREEBSD_CLOUD_IMAGE_URL%/*}/CHECKSUM.SHA256}"
 VERIFIED_MARKER="${FREEBSD_CLOUD_IMAGE_CACHE}.verified"
 
+if [ -n "$FREEBSD_CLOUD_IMAGE_SHA256" ]; then
+    case "$FREEBSD_CLOUD_IMAGE_SHA256" in
+        *[!0-9A-Fa-f]*) die "invalid explicit cloud image SHA-256 digest" ;;
+    esac
+    [ "${#FREEBSD_CLOUD_IMAGE_SHA256}" -eq 64 ] || \
+        die "invalid explicit cloud image SHA-256 digest length"
+    FREEBSD_CLOUD_IMAGE_SHA256=$(printf '%s' "$FREEBSD_CLOUD_IMAGE_SHA256" | tr 'A-F' 'a-f')
+fi
+
 sha256_file() {
     file=$1
     if command -v sha256 >/dev/null 2>&1; then
