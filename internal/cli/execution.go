@@ -49,7 +49,7 @@ func runApply(args []string, stdout, stderr io.Writer) int {
 			return executionFailure(stdout, stderr, *jsonOutput, "apply", err)
 		}
 	}
-	runner := execution.Executor{Repository: repo, Driver: execution.NewSystemDriver()}
+	runner := execution.Executor{Repository: repo, Driver: execution.NewRuntimeDriver()}
 	inspection, err := runner.Run(ctx, prepared.Resource.Name)
 	if err != nil {
 		return executionFailure(stdout, stderr, *jsonOutput, "apply", err)
@@ -82,7 +82,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return executionFailure(stdout, stderr, *jsonOutput, "reconcile", err)
 	}
-	runner := execution.Executor{Repository: repo, Driver: execution.NewSystemDriver()}
+	runner := execution.Executor{Repository: repo, Driver: execution.NewRuntimeDriver()}
 	inspection, err := runner.Run(ctx, prepared.Resource.Name)
 	if err != nil {
 		return executionFailure(stdout, stderr, *jsonOutput, "reconcile", err)
@@ -119,7 +119,7 @@ func runDelete(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return executionFailure(stdout, stderr, *jsonOutput, "delete", err)
 	}
-	runner := execution.Executor{Repository: repo, Driver: execution.NewSystemDriver()}
+	runner := execution.Executor{Repository: repo, Driver: execution.NewRuntimeDriver()}
 	inspection, err := runner.Run(ctx, prepared.Resource.Name)
 	if err != nil {
 		return executionFailure(stdout, stderr, *jsonOutput, "delete", err)
