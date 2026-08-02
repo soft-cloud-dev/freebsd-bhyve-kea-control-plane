@@ -1,7 +1,7 @@
 schema = 1
 name = "freebsd-node-01"
 owner = "admin"
-image = "freebsd-14.3"
+image = "freebsd-14.4"
 profile = "jail-host"
 pool = "vm-lan"
 desired_power = "running"
