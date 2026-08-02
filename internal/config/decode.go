@@ -84,10 +84,34 @@ func requiredBool(values map[string]any, key string) (bool, error) {
 	return result, nil
 }
 
+func optionalBool(values map[string]any, key string) (bool, error) {
+	value, exists := values[key]
+	if !exists {
+		return false, nil
+	}
+	result, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("%s must be a boolean", key)
+	}
+	return result, nil
+}
+
 func requiredStrings(values map[string]any, key string) ([]string, error) {
 	value, exists := values[key]
 	if !exists {
 		return nil, fmt.Errorf("missing key %q", key)
+	}
+	result, ok := value.([]string)
+	if !ok {
+		return nil, fmt.Errorf("%s must be an array of strings", key)
+	}
+	return result, nil
+}
+
+func optionalStrings(values map[string]any, key string) ([]string, error) {
+	value, exists := values[key]
+	if !exists {
+		return nil, nil
 	}
 	result, ok := value.([]string)
 	if !ok {
