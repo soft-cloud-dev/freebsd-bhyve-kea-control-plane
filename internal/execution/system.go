@@ -198,17 +198,8 @@ func (d *SystemDriver) ensureStorageAbsent(ctx context.Context, input planner.St
 func (d *SystemDriver) ensureSeed(ctx context.Context, input planner.StepInput) (Result, error) {
 	guestDir := filepath.Join(input.Host.VMRoot, input.Resource)
 	seedPath := filepath.Join(guestDir, "seed.iso")
-	if digest, err := fileSHA256(seedPath); err == nil {
-		return Result{Postcondition: map[string]any{"path": seedPath, "sha256": digest}}, nil
-	}
-	if err := os.MkdirAll(guestDir, 0o750); err != nil {
-		return Result{}, err
-	}
-	tempDir, err := os.MkdirTemp(guestDir, ".seed-")
-	if err != nil {
-		return Result{}, err
-	}
-	defer os.RemoveAll(tempDir)
+	markerPath := seedPath + ".bkcp.json"
+
 	meta := fmt.Sprintf("instance-id: %s\nlocal-hostname: %s\n", input.Resource, input.Resource)
 	user := "#cloud-config\n"
 	if input.Specification.SSHPublicKeyFile != "" {
@@ -223,15 +214,45 @@ func (d *SystemDriver) ensureSeed(ctx context.Context, input planner.StepInput) 
 		user += fmt.Sprintf("users:\n  - default\n  - name: '%s'\n    lock_passwd: true\n    shell: /bin/sh\n    ssh_authorized_keys:\n      - '%s'\n", yamlQuote(input.Specification.Owner), yamlQuote(key))
 	}
 	user += fmt.Sprintf("write_files:\n  - path: /etc/bkcp-profile\n    permissions: '0644'\n    content: '%s'\n", yamlQuote(input.Specification.Profile))
-	if err := os.WriteFile(filepath.Join(tempDir, "meta-data"), []byte(meta), 0o600); err != nil {
+
+	sourceHash := sha256.Sum256([]byte(meta + "\x00" + user))
+	sourceDigest := hex.EncodeToString(sourceHash[:])
+	var marker map[string]string
+	if encoded, err := os.ReadFile(markerPath); err == nil && json.Unmarshal(encoded, &marker) == nil {
+		if marker["source_sha256"] == sourceDigest {
+			if digest, err := fileSHA256(seedPath); err == nil && digest == marker["iso_sha256"] {
+				return Result{Postcondition: marker}, nil
+			}
+		}
+	}
+
+	if err := os.MkdirAll(guestDir, 0o750); err != nil {
 		return Result{}, err
 	}
-	if err := os.WriteFile(filepath.Join(tempDir, "user-data"), []byte(user), 0o600); err != nil {
+	tempDir, err := os.MkdirTemp(guestDir, ".seed-")
+	if err != nil {
 		return Result{}, err
 	}
+	defer os.RemoveAll(tempDir)
+
+	metaPath := filepath.Join(tempDir, "meta-data")
+	userPath := filepath.Join(tempDir, "user-data")
+	if err := os.WriteFile(metaPath, []byte(meta), 0o600); err != nil {
+		return Result{}, err
+	}
+	if err := os.WriteFile(userPath, []byte(user), 0o600); err != nil {
+		return Result{}, err
+	}
+	epoch := time.Unix(0, 0)
+	for _, path := range []string{tempDir, metaPath, userPath} {
+		if err := os.Chtimes(path, epoch, epoch); err != nil {
+			return Result{}, err
+		}
+	}
+
 	seedTemp := filepath.Join(guestDir, ".seed.iso.tmp")
 	_ = os.Remove(seedTemp)
-	command := exec.CommandContext(ctx, "makefs", "-t", "cd9660", "-o", "rockridge,label=cidata", seedTemp, tempDir)
+	command := exec.CommandContext(ctx, "makefs", "-T", "0", "-t", "cd9660", "-o", "rockridge,label=cidata", seedTemp, tempDir)
 	if output, err := command.CombinedOutput(); err != nil {
 		return Result{}, fmt.Errorf("makefs seed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
@@ -241,17 +262,23 @@ func (d *SystemDriver) ensureSeed(ctx context.Context, input planner.StepInput) 
 	if err := os.Rename(seedTemp, seedPath); err != nil {
 		return Result{}, err
 	}
-	digest, err := fileSHA256(seedPath)
+	isoDigest, err := fileSHA256(seedPath)
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Postcondition: map[string]any{"path": seedPath, "sha256": digest}}, nil
+	marker = map[string]string{"path": seedPath, "source_sha256": sourceDigest, "iso_sha256": isoDigest}
+	if err := writeJSONAtomic(markerPath, marker, 0o600); err != nil {
+		return Result{}, err
+	}
+	return Result{Postcondition: marker}, nil
 }
 
 func (d *SystemDriver) ensureSeedAbsent(input planner.StepInput) (Result, error) {
 	seedPath := filepath.Join(input.Host.VMRoot, input.Resource, "seed.iso")
-	if err := os.Remove(seedPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return Result{}, err
+	for _, path := range []string{seedPath, seedPath + ".bkcp.json"} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return Result{}, err
+		}
 	}
 	return Result{Postcondition: map[string]any{"path": seedPath, "absent": true}}, nil
 }
