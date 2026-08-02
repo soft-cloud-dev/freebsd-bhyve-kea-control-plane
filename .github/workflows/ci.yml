@@ -1,65 +1,21 @@
-name: Portable CI
+name: V2 CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
 
-concurrency:
-  group: portable-ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  lint-and-test:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install validation tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck jq make curl xz-utils
-
-      - name: Validate POSIX shell
-        run: make lint
-
-      - name: Run portable tests
-        run: make test
-
-      - name: Validate JSON files
-        run: |
-          find config -type f -name '*.json' -print0 |
-            xargs -0 -r -n1 jq empty
-
-      - name: Validate YAML files
-        run: |
-          ruby -e '
-            require "yaml"
-            require "date"
-            Dir.glob("{config,.github}/**/*.{yml,yaml}").sort.each do |path|
-              YAML.safe_load(File.read(path), permitted_classes: [Date], aliases: true)
-              puts "OK #{path}"
-            end
-          '
-
-      - name: Reject committed secrets
-        run: |
-          private_key_prefix='BEGIN'
-          ssh_key_type='ssh-ed25519'
-          postgres_scheme='postgresql'
-          secret_pattern="(${private_key_prefix} (RSA|OPENSSH|EC) PRIVATE KEY|${ssh_key_type} AAAA[[:alnum:]+/]{20,}|${postgres_scheme}://[^[:space:]]+:[^[:space:]@]+@)"
-          if grep -RInE \
-            --exclude-dir=.git \
-            --exclude='*.md' \
-            "$secret_pattern" \
-            .; then
-            echo 'Potential secret material detected.' >&2
-            exit 1
-          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make verify
