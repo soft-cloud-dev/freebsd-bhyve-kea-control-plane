@@ -1,8 +1,8 @@
-# Bare-Metal Three-Node Bootstrap
+# V2-Only Bare-Metal Three-Node Bootstrap
 
-This runbook builds one FreeBSD bare-metal control-plane host and three FreeBSD `vm-bhyve` guests.
+This runbook defines the V2-only path for building one FreeBSD bare-metal control-plane host and three FreeBSD `vm-bhyve` guests.
 
-It deliberately separates the frozen executable V1 shell stack from the canonical V2 control plane.
+It does not use `legacy/v1-shell` and does not require importing or adopting V1 resources.
 
 ## Target topology
 
@@ -19,445 +19,339 @@ Internet / upstream -- igb0 -- vlan10: 10.0.10.2/24
        freebsd-node-01  freebsd-node-02  freebsd-node-03
 ```
 
-The bare-metal host runs:
+The bare-metal host owns:
 
 - ZFS and `vm-bhyve`;
-- PostgreSQL inventory/IPAM and V2 state;
+- PostgreSQL V2 state;
 - Kea DHCP4 and Kea Control Agent;
-- Unbound DNS;
+- Unbound DNS when enabled;
 - PF routing and isolation;
-- Prometheus, Loki, Grafana, and exporters;
-- optionally Stork.
+- image cache and cloud-init seed artifacts.
 
-The guests are ordinary FreeBSD VMs prepared for native jails and WireGuard. The V1 cloud-init profile does not create a Kubernetes cluster, WireGuard mesh, distributed database, or HA control plane.
+The guests are ordinary FreeBSD VMs. Any jail, WireGuard, Kubernetes, database, or application topology inside them is a separate workload layer.
 
-## V1/V2 execution boundary
+## Current V2 limitation
 
-V2 is currently stateful but non-executing. It validates configuration, migrates the `bkcp` schema, inspects state, and generates deterministic plans. It does not allocate addresses, promote images, generate cloud-init, modify Kea, create ZFS storage, or operate `vm-bhyve`.
+The current `main` branch is stateful but non-executing.
 
-The supported bootstrap sequence is therefore:
+It already provides:
 
-1. Use `legacy/v1-shell` to install and mutate the bare-metal host.
-2. Use V1 to provision the three VMs.
-3. Install V2 alongside V1 for validation, migrations, and planning.
-4. Keep the VMs V1-managed until V2 import and adoption are implemented.
+- strict site and VM TOML validation;
+- deterministic normalization and plans;
+- specification, plan, step-input, and idempotency digests;
+- checksummed PostgreSQL migrations;
+- declared, allocated, observed, and effective state contracts;
+- durable operation and ordered-step journals;
+- read-only dependency, status, and inspection commands.
 
-Do not copy V1 scripts into `main`. A V2 plan is an execution contract, not evidence that infrastructure changed.
+It does not yet provide:
 
-## Release selection
+- durable IP, MAC, dataset, zvol, or image allocations;
+- image download, verification, or promotion;
+- cloud-init seed generation;
+- Kea reservation mutation;
+- ZFS, PF, service, or `vm-bhyve` mutation;
+- observation collectors;
+- a resumable executor;
+- public `apply`, `delete`, or `reconcile` commands.
 
-As of August 2, 2026, FreeBSD 15.1-RELEASE is the newest production release. For this frozen V1 workflow, use FreeBSD 14.4-RELEASE for both host and guests because it is closer to the 14.x environment for which the scripts were written.
+Therefore, a real V2-only bootstrap requires implementing the execution vertical slice described below. Installing V1 is not part of the target design.
 
-FreeBSD 14.4-RELEASE is supported through December 31, 2026. FreeBSD 14.3-RELEASE reached end of life on June 30, 2026, so override the V1 default image URL.
+## Required V2 vertical slice
 
-Use:
+### 1. Durable allocation
 
-```text
-FreeBSD-14.4-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz
-```
+Implement allocation before any external mutation.
 
-Official references:
+For each VM, persist:
 
-- https://www.freebsd.org/releases/
-- https://www.freebsd.org/releases/14.4R/announce/
-- https://www.freebsd.org/security/
-- https://download.freebsd.org/releases/VM-IMAGES/14.4-RELEASE/amd64/Latest/
+- IP address from the selected site pool;
+- locally administered MAC address;
+- dataset and zvol names;
+- Kea subnet identifier;
+- image name and verified digest;
+- allocation generation.
 
-## Hardware baseline
+Requirements:
 
-Enable Intel VT-x/EPT or AMD-V/RVI in firmware. Keep IPMI, serial console, or a local keyboard attached throughout network, SSH, and PF configuration.
+- one PostgreSQL transaction;
+- transaction-scoped per-resource advisory lock;
+- uniqueness constraints for IP, MAC, dataset, and zvol;
+- deterministic retry behavior;
+- pool exhaustion as a typed blocked condition;
+- no allocation changes when identical intent is reapplied.
 
-The default VM template gives each node:
-
-- 2 vCPUs;
-- 2 GiB RAM;
-- 20 GiB sparse ZFS storage;
-- one virtio network interface;
-- one NoCloud seed ISO.
-
-For three nodes, reserve at least 6 vCPUs, 6 GiB guest RAM, and 60 GiB nominal guest storage. A practical host baseline is 8 CPU threads, 16 GiB RAM, and at least 128 GiB usable ZFS capacity.
-
-## Network plan
-
-The example assumes:
-
-```text
-igb0       upstream trunk
-vlan10     management network, 10.0.10.2/24
-bridge0    isolated VM LAN, 10.0.20.1/24
-```
-
-The upstream switch port connected to `igb0` must carry VLAN 10 tagged.
-
-The VM LAN does not require a physical bridge member. The host routes and NATs traffic between `bridge0` and the upstream interface through PF. Kea and Unbound serve the VM LAN.
-
-The V1 top-level installer checks that `EXT_IF`, `MGMT_IF`, and `LAN_IF` already exist before the host setup stage. Create `vlan10` and `bridge0` temporarily before running `make install`; the installer persists them afterward.
-
-## Repository layout
-
-Use separate checkouts:
+Suggested package boundary:
 
 ```text
-/usr/local/src/bkcp-v1
-/usr/local/src/bkcp-v2
+internal/allocation/
+internal/state/postgres/allocation.go
 ```
 
-- `bkcp-v1` is the temporary infrastructure writer.
-- `bkcp-v2` is the canonical state, validation, and planning implementation.
+### 2. Read-only observations
 
-## Phase 1: bare-metal preflight
+Add collectors for:
 
-Replace interface, gateway, hostname, and key paths before running this block from a local or IPMI console.
+- `vm-bhyve` guest existence and power state;
+- ZFS dataset and zvol state;
+- Kea reservation state;
+- cloud-init seed artifact state;
+- PF anchor state;
+- image-cache state.
+
+Every collector must return one of:
+
+```text
+unknown
+unavailable
+absent
+present
+```
+
+Power state additionally distinguishes `running` and `stopped`.
+
+Unavailable evidence must never be converted into confirmed absence.
+
+Suggested package boundary:
+
+```text
+internal/observe/
+internal/observe/vmbhyve/
+internal/observe/zfs/
+internal/observe/kea/
+internal/observe/seed/
+internal/observe/pf/
+internal/observe/image/
+```
+
+### 3. Typed idempotent drivers
+
+Implement drivers with explicit preconditions, actions, and postconditions.
+
+Required drivers:
+
+```text
+internal/driver/image/
+internal/driver/zfs/
+internal/driver/cloudinit/
+internal/driver/kea/
+internal/driver/vmbhyve/
+internal/driver/pf/
+```
+
+Each driver must:
+
+- accept typed input rather than arbitrary shell text;
+- validate that persisted step input matches its digest;
+- detect an already-satisfied postcondition;
+- perform one bounded mutation;
+- verify the postcondition through the authoritative system;
+- return typed retryable, blocked, or terminal errors;
+- avoid logging credentials or private key material.
+
+#### Image driver
+
+- download into a temporary path;
+- verify the independently configured compressed SHA-256 digest;
+- decompress into a temporary raw image;
+- calculate and persist the raw-image digest;
+- atomically promote into the cache;
+- reject the all-zero example digest.
+
+#### ZFS driver
+
+- create the per-VM dataset and zvol;
+- verify dataset and zvol properties;
+- write the verified raw image only when the target is newly created or explicitly authorized;
+- never infer destructive resize or replacement behavior.
+
+#### Cloud-init driver
+
+- render deterministic `meta-data` and `user-data`;
+- validate the referenced SSH public key;
+- create a deterministic NoCloud `cidata` ISO;
+- use restrictive temporary-file permissions;
+- persist and verify the artifact digest.
+
+#### Kea driver
+
+- use the configured Control Agent and credential files;
+- create or update the PostgreSQL-backed reservation;
+- verify subnet, MAC, IP, and hostname after mutation;
+- keep Kea's hosts database authoritative for reservations.
+
+#### `vm-bhyve` driver
+
+- create or update the guest definition;
+- bind the allocated MAC, zvol, image loader, bridge switch, and seed ISO;
+- start or stop according to declared power intent;
+- verify guest existence and power state through `vm-bhyve`.
+
+#### PF driver
+
+- render only the configured dedicated anchor;
+- validate rules before loading;
+- never replace `/etc/pf.conf`;
+- verify the loaded anchor digest.
+
+### 4. Resumable executor
+
+Implement an executor that consumes the persisted operation and ordered step journal.
+
+Suggested package boundary:
+
+```text
+internal/executor/
+internal/reconcile/
+```
+
+Execution contract:
+
+```text
+load persisted operation
+verify generation and plan digest
+collect current observations
+find first incomplete step
+verify its input digest
+check whether postcondition already holds
+execute one typed driver action when required
+verify postcondition
+persist step success
+repeat
+collect final observations
+derive effective state
+```
+
+Crash recovery must resume from the first step whose postcondition is not verified. It must not rerun the entire operation blindly.
+
+### 5. Public V2 commands
+
+Add the following command surface only after the allocation, observation, driver, and executor contracts exist:
+
+```text
+cpctl apply --file VM.toml [--config PATH] [--json]
+cpctl reconcile NAME [--config PATH] [--json]
+cpctl delete NAME [--config PATH] [--json]
+```
+
+`apply` must:
+
+1. load and normalize the manifest;
+2. allocate or reuse durable identities;
+3. persist or reuse the exact operation and steps;
+4. execute from the first unverified step;
+5. collect final observations;
+6. derive effective state;
+7. return success only when the declared postcondition is verified.
+
+### 6. FreeBSD execution tests
+
+Linux CI remains suitable for:
+
+- deterministic planning;
+- PostgreSQL allocation and journal behavior;
+- driver contract unit tests using fakes;
+- executor interruption and retry tests.
+
+A separate FreeBSD workflow or bare-metal test host is required for:
+
+- ZFS datasets and zvols;
+- `vm-bhyve` creation and lifecycle;
+- PF anchors;
+- Kea Control Agent integration;
+- cloud-init seed boot validation;
+- crash-and-resume execution tests.
+
+## Host prerequisites
+
+Until V2 gains a dedicated host-bootstrap command, prepare the FreeBSD host manually or through external configuration management.
+
+Required host state:
+
+- a supported FreeBSD release with hardware virtualization enabled;
+- ZFS pool and VM dataset;
+- `vm-bhyve` installed and enabled;
+- management interface and VM bridge configured;
+- PostgreSQL available for V2 state;
+- Kea DHCP4 and authenticated loopback Control Agent;
+- PF enabled with a site-owned include for the V2 anchor;
+- root or narrowly delegated privileges for the V2 executor;
+- trusted key-based administrative access and an independent console.
+
+This prerequisite is not V1. It is the platform on which V2 executes.
+
+## V2 site configuration
+
+Create the site configuration from the checked-in example:
 
 ```sh
-set -eu
-
-HOSTNAME_FQDN=bhyve01.softcloud.dev
-EXT_IF=igb0
-MGMT_IF=vlan10
-MGMT_VLAN=10
-MGMT_ADDR=10.0.10.2
-MGMT_PREFIX=24
-MGMT_GW=10.0.10.1
-LAN_IF=bridge0
-LAN_ADDR=10.0.20.1
-LAN_PREFIX=24
-LAN_MTU=1496
-VM_DATASET=zroot/vm
-ADMIN_KEY=/root/bootstrap-admin.pub
-
-test "$(id -u)" -eq 0
-test -r "$ADMIN_KEY"
-
-hostname "$HOSTNAME_FQDN"
-sysrc hostname="$HOSTNAME_FQDN"
-
-freebsd-update fetch install
-
-env ASSUME_ALWAYS_YES=yes pkg bootstrap
-pkg update
-pkg install -y git ca_root_nss
-
-sysrc ntpd_enable=YES
-service ntpd restart 2>/dev/null || service ntpd start
-
-kldload vmm
-kldload if_vlan 2>/dev/null || true
-
-grep -E 'VT-x|Features2' /var/run/dmesg.boot || true
-sysctl hw.vmm.vmx.initialized 2>/dev/null || \
-  sysctl hw.vmm.svm.features 2>/dev/null || true
-
-ifconfig "$EXT_IF" up
-
-ifconfig "$MGMT_IF" >/dev/null 2>&1 || ifconfig "$MGMT_IF" create
-ifconfig "$MGMT_IF" vlan "$MGMT_VLAN" vlandev "$EXT_IF"
-ifconfig "$MGMT_IF" inet "$MGMT_ADDR/$MGMT_PREFIX" mtu 1496 up
-
-ifconfig "$LAN_IF" >/dev/null 2>&1 || ifconfig "$LAN_IF" create
-ifconfig "$LAN_IF" inet "$LAN_ADDR/$LAN_PREFIX" mtu "$LAN_MTU" up
-
-route -n get default >/dev/null 2>&1 || route add default "$MGMT_GW"
-
-zpool status
-ifconfig "$EXT_IF"
-ifconfig "$MGMT_IF"
-ifconfig "$LAN_IF"
+install -d -m 0750 /usr/local/etc/bkcp
+cp config/site.example.toml /usr/local/etc/bkcp/site.toml
+vi /usr/local/etc/bkcp/site.toml
 ```
 
-## Phase 2: clone and install V1
+Configure:
 
-The installer configures SSH hardening, PF, PostgreSQL, Kea, Unbound, ZFS, `vm-bhyve`, and observability. Start with Stork disabled; it is not required to validate DHCP and VM provisioning.
+```text
+control_plane_id
+host external interface
+host management interface
+host VM bridge
+ZFS dataset and mount point
+PostgreSQL DSN
+Kea Control Agent URL and credential files
+PF anchor
+address pool
+FreeBSD image URL and verified digest
+```
+
+Keep `control_plane_id` stable after allocations begin.
+
+## Initialize V2
 
 ```sh
-set -eu
+git clone https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane.git
+cd freebsd-bhyve-kea-control-plane
 
-REPOSITORY=https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane.git
-V1_DIR=/usr/local/src/bkcp-v1
-V2_DIR=/usr/local/src/bkcp-v2
-ADMIN_KEY=/root/bootstrap-admin.pub
+make verify
+make build
 
-test -d "$V1_DIR/.git" || \
-  git clone --branch legacy/v1-shell --single-branch "$REPOSITORY" "$V1_DIR"
-
-test -d "$V2_DIR/.git" || \
-  git clone --branch main --single-branch "$REPOSITORY" "$V2_DIR"
-
-cd "$V1_DIR"
-make lint
-
-make install \
-  TRUSTED_SSH_READY=yes \
-  STORK_ENABLE=no \
-  MGMT_USER=admin \
-  SSH_ADMIN_KEY_FILE="$ADMIN_KEY" \
-  EXT_IF=igb0 \
-  MGMT_IF=vlan10 \
-  LAN_IF=bridge0 \
-  LAN_MTU=1496 \
-  MGMT_ADDR=10.0.10.2 \
-  MGMT_NET=10.0.10.0/24 \
-  LAN_NET=10.0.20.0/24 \
-  DNS_ADDR=10.0.20.1 \
-  VM_DATASET=zroot/vm \
-  IPAM_POOL=vm-lan \
-  IPAM_SUBNET=10.0.20.0/24 \
-  IPAM_FIRST_HOST=10.0.20.10 \
-  IPAM_LAST_HOST=10.0.20.99 \
-  IPAM_VLAN=20 \
-  KEA_SUBNET_ID=1
-
-make validate-freebsd STORK_ENABLE=no
-
-sockstat -4 -6 -l
-vm switch list
-vm list
-zfs list -r zroot/vm
+bin/cpctl doctor --config /usr/local/etc/bkcp/site.toml --offline
+bin/cpctl doctor --config /usr/local/etc/bkcp/site.toml
+bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run --json
+bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml
+bin/cpctl status --config /usr/local/etc/bkcp/site.toml
 ```
 
-Keep the console open until a second key-based SSH session to `admin@10.0.10.2` succeeds.
+With the current implementation, stop here or generate plans. External mutation is not yet available.
 
-Expected core listeners:
+## Define the three VMs
+
+Create one manifest per guest:
 
 ```text
-Unbound DNS          10.0.20.1:53
-Grafana              10.0.10.2:3000
-Prometheus           127.0.0.1:9090
-Loki                 127.0.0.1:3100
-node_exporter        127.0.0.1:9100
-postgres_exporter    127.0.0.1:9187
-Kea Control Agent    127.0.0.1:8000
-```
-
-Validate PostgreSQL, Kea, ZFS, `vm-bhyve`, PF, DNS, and observability as separate authority domains.
-
-## Phase 3: pin the cloud image
-
-The V1 fetcher verifies the compressed image, decompresses it, records the raw-image digest, and reuses the cache only when the verification marker still matches.
-
-The verified raw image is stored at:
-
-```text
-/var/cache/control-plane/freebsd-cloud.raw
-```
-
-Pin the checksum explicitly:
-
-```sh
-set -eu
-
-V1_DIR=/usr/local/src/bkcp-v1
-CONTROL_PLANE_ID=softcloud-lab-01
-CLUSTER_KEY=/root/.ssh/freebsd-cluster
-IMAGE_URL=https://download.freebsd.org/releases/VM-IMAGES/14.4-RELEASE/amd64/Latest/FreeBSD-14.4-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz
-CHECKSUM_URL=https://download.freebsd.org/releases/VM-IMAGES/14.4-RELEASE/amd64/Latest/CHECKSUM.SHA256
-CHECKSUM_FILE=/root/FreeBSD-14.4-CHECKSUM.SHA256
-IMAGE_NAME=${IMAGE_URL##*/}
-
-install -d -m 0700 /root/.ssh
-
-if [ ! -f "$CLUSTER_KEY" ]; then
-    ssh-keygen -q -t ed25519 -N '' -f "$CLUSTER_KEY"
-fi
-
-fetch -o "$CHECKSUM_FILE" "$CHECKSUM_URL"
-
-IMAGE_SHA256=$(
-    awk -v image="$IMAGE_NAME" \
-      '$1 == "SHA256" && $2 == "(" image ")" && $3 == "=" { print $4; exit }' \
-      "$CHECKSUM_FILE"
-)
-
-test "${#IMAGE_SHA256}" -eq 64
-
-cd "$V1_DIR"
-
-make fetch-cloud-image \
-  FREEBSD_CLOUD_IMAGE_URL="$IMAGE_URL" \
-  FREEBSD_CLOUD_IMAGE_SHA256="$IMAGE_SHA256" \
-  FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="$CHECKSUM_URL"
-```
-
-## Phase 4: review VM sizing
-
-The active template is normally located below the ZFS dataset mount point:
-
-```text
-/zroot/vm/.templates/freebsd.conf
-```
-
-Discover the actual mount point with:
-
-```sh
-zfs get -H -o value mountpoint zroot/vm
-```
-
-Edit the template before creating the first node when the defaults are insufficient. For example:
-
-```text
-cpu="2"
-memory="4G"
-disk0_size="40G"
-```
-
-Changing `disk0_size` after guest creation does not resize an existing zvol automatically.
-
-## Phase 5: provision three nodes
-
-Disable kubectl bootstrap. The V1 cluster workflow installs kubectl only as a client for a separate Kubernetes control plane; these FreeBSD guests are not configured as kubelet workers.
-
-```sh
-set -eu
-
-V1_DIR=/usr/local/src/bkcp-v1
-CONTROL_PLANE_ID=softcloud-lab-01
-CLUSTER_KEY=/root/.ssh/freebsd-cluster
-IMAGE_URL=https://download.freebsd.org/releases/VM-IMAGES/14.4-RELEASE/amd64/Latest/FreeBSD-14.4-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz
-CHECKSUM_URL=https://download.freebsd.org/releases/VM-IMAGES/14.4-RELEASE/amd64/Latest/CHECKSUM.SHA256
-IMAGE_SHA256=$(awk -v image="${IMAGE_URL##*/}" \
-  '$1 == "SHA256" && $2 == "(" image ")" && $3 == "=" { print $4; exit }' \
-  /root/FreeBSD-14.4-CHECKSUM.SHA256)
-
-cd "$V1_DIR"
-
-make cluster-up \
-  KUBECTL_BOOTSTRAP=no \
-  CONTROL_PLANE_ID="$CONTROL_PLANE_ID" \
-  CLUSTER_NODE_PREFIX=freebsd-node \
-  CLUSTER_NODE_COUNT=3 \
-  CLUSTER_BOOT_TIMEOUT=600 \
-  CLUSTER_POLL_INTERVAL=5 \
-  VM_OWNER=admin \
-  CLOUD_INIT_USER=admin \
-  IPAM_POOL=vm-lan \
-  SSH_PUBLIC_KEY_FILE="${CLUSTER_KEY}.pub" \
-  SSH_PRIVATE_KEY_FILE="$CLUSTER_KEY" \
-  FREEBSD_CLOUD_IMAGE_URL="$IMAGE_URL" \
-  FREEBSD_CLOUD_IMAGE_SHA256="$IMAGE_SHA256" \
-  FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="$CHECKSUM_URL"
-```
-
-For each node, V1:
-
-1. creates a `vm-bhyve` guest;
-2. enforces `bhyveload`;
-3. writes the verified raw image to the guest zvol;
-4. transactionally allocates IP and MAC state in PostgreSQL;
-5. writes the MAC to the guest configuration;
-6. creates a NoCloud `cidata` seed ISO;
-7. adds a PostgreSQL-backed Kea reservation;
-8. starts the guest;
-9. marks the inventory row as running.
-
-The wrapper waits for `/var/db/freebsd-jail-node-ready` over SSH and writes:
-
-```text
-/var/db/freebsd-bhyve-kea-control-plane/clusters/freebsd-node.tsv
-```
-
-Shell rollback is best-effort rather than crash-safe. Interrupted runs may require manual reconciliation.
-
-## Phase 6: validate the nodes
-
-Verify four views:
-
-1. `vm list` — runtime state.
-2. `make cluster-status` — V1 inventory state.
-3. Kea reservations — DHCP authority.
-4. SSH/cloud-init state inside each guest.
-
-```sh
-set -eu
-
-V1_DIR=/usr/local/src/bkcp-v1
-CLUSTER_KEY=/root/.ssh/freebsd-cluster
-INVENTORY=/var/db/freebsd-bhyve-kea-control-plane/clusters/freebsd-node.tsv
-
-cd "$V1_DIR"
-
-make cluster-status \
-  CLUSTER_NODE_PREFIX=freebsd-node \
-  CLUSTER_NODE_COUNT=3
-
-vm list
-cat "$INVENTORY"
-
-awk 'NR > 1 { print $1, $2 }' "$INVENTORY" |
-while read -r name ip
-do
-    printf '%s %s\n' "$name" "$ip"
-    ssh \
-      -i "$CLUSTER_KEY" \
-      -o BatchMode=yes \
-      -o StrictHostKeyChecking=accept-new \
-      "admin@$ip" \
-      'uname -a; test -f /var/db/freebsd-jail-node-ready; sysrc -n jail_enable; wg --version'
-done
-```
-
-Inside each guest, verify:
-
-- the expected FreeBSD release;
-- `jail_enable=YES`;
-- `wireguard-tools` installed;
-- `if_wg` loadable;
-- readiness marker present;
-- default route through `10.0.20.1`;
-- DNS through `10.0.20.1`;
-- outbound connectivity.
-
-This produces three prepared FreeBSD jail/WireGuard nodes. Creating an actual distributed service remains a separate workload-specific step.
-
-## Phase 7: initialize V2 alongside V1
-
-Create:
-
-```text
-/usr/local/etc/bkcp/site.toml
 /usr/local/etc/bkcp/vms.d/freebsd-node-01.toml
 /usr/local/etc/bkcp/vms.d/freebsd-node-02.toml
 /usr/local/etc/bkcp/vms.d/freebsd-node-03.toml
 ```
 
-The V2 site configuration must describe the same stable control-plane ID, interfaces, bridge, ZFS dataset, PostgreSQL instance, Kea endpoint, pool, image, and verified digest.
+Each manifest should declare:
+
+- stable guest name;
+- owner;
+- image;
+- pool;
+- desired power state;
+- CPU, memory, and disk size;
+- SSH public-key file;
+- workload profile when supported.
+
+Before `apply` exists, inspect deterministic plans:
 
 ```sh
-set -eu
-
-V2_DIR=/usr/local/src/bkcp-v2
-
-cd "$V2_DIR"
-git pull --ff-only
-make verify
-make build
-
-install -m 0755 bin/cpctl /usr/local/sbin/cpctl
-install -d -m 0750 /usr/local/etc/bkcp
-install -d -m 0750 /usr/local/etc/bkcp/vms.d
-
-test -f /usr/local/etc/bkcp/site.toml || \
-  cp config/site.example.toml /usr/local/etc/bkcp/site.toml
-
-cp config/vms/freebsd-node.example.toml \
-  /usr/local/etc/bkcp/vms.d/freebsd-node-01.toml
-
-sed 's/name = "freebsd-node-01"/name = "freebsd-node-02"/' \
-  config/vms/freebsd-node.example.toml \
-  > /usr/local/etc/bkcp/vms.d/freebsd-node-02.toml
-
-sed 's/name = "freebsd-node-01"/name = "freebsd-node-03"/' \
-  config/vms/freebsd-node.example.toml \
-  > /usr/local/etc/bkcp/vms.d/freebsd-node-03.toml
-
-cpctl doctor --config /usr/local/etc/bkcp/site.toml --offline
-cpctl doctor --config /usr/local/etc/bkcp/site.toml
-cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run --json
-cpctl migrate --config /usr/local/etc/bkcp/site.toml
-cpctl status --config /usr/local/etc/bkcp/site.toml
-
 for manifest in /usr/local/etc/bkcp/vms.d/*.toml
 do
-    cpctl plan \
+    bin/cpctl plan \
       --config /usr/local/etc/bkcp/site.toml \
       --file "$manifest" \
       --generation 1 \
@@ -465,46 +359,57 @@ do
 done
 ```
 
-Stop at `plan`. V2 has no public `apply` or `adopt` command, so it must not claim ownership of the V1-created guests. `cpctl status` may remain empty until import and adoption are implemented.
+## Expected V2-only bootstrap after implementation
 
-## Back up the working installation
-
-Preserve:
-
-```text
-PostgreSQL inventory database
-PostgreSQL kea_hosts database
-/usr/local/etc/kea
-/usr/local/etc/pf.conf and included anchors
-/usr/local/etc/unbound
-/usr/local/etc/grafana
-/usr/local/etc/prometheus.yml
-/usr/local/etc/loki.yml
-/usr/local/etc/promtail.yml
-/zroot/vm
-/usr/local/etc/bkcp
-```
-
-Take PostgreSQL-consistent dumps and a recursive ZFS snapshot before further experimentation.
-
-## Remove the three V1-managed nodes
-
-Use `cluster-down` only while the V1 inventory, Kea reservations, ZFS resources, and `vm-bhyve` guests remain mutually consistent.
+The intended operator flow is:
 
 ```sh
-set -eu
+bin/cpctl doctor --config /usr/local/etc/bkcp/site.toml
+bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml
 
-cd /usr/local/src/bkcp-v1
+for manifest in /usr/local/etc/bkcp/vms.d/*.toml
+do
+    bin/cpctl apply \
+      --config /usr/local/etc/bkcp/site.toml \
+      --file "$manifest" \
+      --json
+done
 
-make cluster-down \
-  CLUSTER_NODE_PREFIX=freebsd-node \
-  CLUSTER_NODE_COUNT=3
-
-make cluster-status \
-  CLUSTER_NODE_PREFIX=freebsd-node \
-  CLUSTER_NODE_COUNT=3
-
-vm list
+bin/cpctl status --config /usr/local/etc/bkcp/site.toml
+bin/cpctl inspect freebsd-node-01 --config /usr/local/etc/bkcp/site.toml --json
+bin/cpctl inspect freebsd-node-02 --config /usr/local/etc/bkcp/site.toml --json
+bin/cpctl inspect freebsd-node-03 --config /usr/local/etc/bkcp/site.toml --json
 ```
 
-Do not run `cluster-down` after manually deleting inventory rows or guests. Reconcile the authoritative systems first.
+The `apply` commands shown here are the target V2 interface. They are not available in the current release.
+
+## Validation criteria
+
+A node is converged only when all authoritative observations agree:
+
+- the V2 allocation exists and is unique;
+- the verified image digest matches the allocation;
+- the ZFS dataset and zvol exist with expected properties;
+- the seed ISO exists and matches its digest;
+- the Kea reservation matches name, MAC, IP, and subnet;
+- the `vm-bhyve` definition references the expected storage, bridge, MAC, and seed;
+- the guest power state matches declared intent;
+- the PF anchor contains the expected scoped rules;
+- every operation step has a verified postcondition;
+- effective state is `converged`.
+
+A persisted operation alone is never proof of convergence.
+
+## Definition of done
+
+The three-node bootstrap is genuinely V2-only when:
+
+- no script or artifact from `legacy/v1-shell` is used;
+- all identities are allocated by V2 and persisted before mutation;
+- all external changes pass through typed V2 drivers;
+- interrupted operations resume safely;
+- unavailable evidence remains distinct from absence;
+- `cpctl apply` converges all three manifests from a clean FreeBSD host;
+- repeated `apply` produces no unnecessary mutation;
+- `cpctl status` and `inspect` explain the resulting state;
+- FreeBSD integration tests cover apply, retry, interruption, drift, and delete.
