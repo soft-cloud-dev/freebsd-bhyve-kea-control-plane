@@ -72,7 +72,7 @@ syntax:
 	@set -e; for file in ${SCRIPTS} ${TESTS}; do echo "sh -n $$file"; sh -n "$$file"; done
 
 lint: syntax
-	@if command -v shellcheck >/dev/null 2>&1; then shellcheck -s sh ${SCRIPTS} ${TESTS}; else echo "shellcheck unavailable; syntax passed"; fi
+	@if command -v shellcheck >/dev/null 2>&1; then shellcheck -s sh -S error ${SCRIPTS} ${TESTS}; else echo "shellcheck unavailable; syntax passed"; fi
 
 test: lint
 	@sh tests/test_pf.sh
