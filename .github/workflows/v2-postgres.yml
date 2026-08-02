@@ -32,6 +32,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
-      - run: go mod tidy
+          cache: true
+      - name: Verify module graph
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - run: go test -race -tags=integration ./internal/state/postgres/...
