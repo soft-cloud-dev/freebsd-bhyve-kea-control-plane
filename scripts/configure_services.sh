@@ -21,7 +21,7 @@ KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-passw
 KEA_HOST_DB_NAME="${KEA_HOST_DB_NAME:-kea_hosts}"
 KEA_HOST_DB_USER="${KEA_HOST_DB_USER:-kea_hosts}"
 KEA_HOST_DB_PASSWORD_FILE="${KEA_HOST_DB_PASSWORD_FILE:-/usr/local/etc/kea/kea-host-db-password}"
-POSTGRES_EXPORTER_DSN="${POSTGRES_EXPORTER_DSN:-}"
+POSTGRES_EXPORTER_DSN="${POSTGRES_EXPORTER_DSN:-postgresql://prometheus@127.0.0.1:5432/inventory?sslmode=disable}"
 STORK_ENABLE="${STORK_ENABLE:-yes}"
 STORK_DB_NAME="${STORK_DB_NAME:-stork}"
 STORK_DB_USER="${STORK_DB_USER:-stork-server}"
@@ -231,6 +231,9 @@ else
     sed '/^  - job_name: kea/,$d' config/prometheus.yml > "$prometheus_tmp"
 fi
 install -m 0644 "$prometheus_tmp" /usr/local/etc/prometheus.yml
+if [ -f config/alerts.yml ]; then
+    install -m 0644 config/alerts.yml /usr/local/etc/alerts.yml
+fi
 if command -v promtool >/dev/null 2>&1; then
     promtool check config /usr/local/etc/prometheus.yml
 fi
@@ -311,6 +314,8 @@ elif [ -x /usr/local/etc/rc.d/grafana-promtail ]; then
 fi
 if [ -n "${POSTGRES_EXPORTER_DSN}" ] && [ -x /usr/local/etc/rc.d/postgres_exporter ]; then
     sysrc postgres_exporter_enable=YES >/dev/null
+    sysrc postgres_exporter_listen_address=127.0.0.1:9187 >/dev/null
+    sysrc postgres_exporter_env="DATA_SOURCE_NAME=${POSTGRES_EXPORTER_DSN}" >/dev/null
 fi
 
 install -d -m 0755 /usr/local/jails

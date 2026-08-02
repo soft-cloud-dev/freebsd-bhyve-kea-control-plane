@@ -11,6 +11,7 @@ PROMTAIL_CONF="${PROMTAIL_CONF:-${ROOT}/config/promtail.yml}"
 DASHBOARD_PROVIDER="${DASHBOARD_PROVIDER:-${ROOT}/config/grafana/provisioning/dashboards/default.yml}"
 DASHBOARD_DIR="${DASHBOARD_DIR:-${ROOT}/config/grafana/provisioning/dashboards/json}"
 GRAFANA_HEALTH_URL="${GRAFANA_HEALTH_URL:-http://10.0.10.2:3000/api/health}"
+ALERTS_CONF="${ALERTS_CONF:-${ROOT}/config/alerts.yml}"
 DEPENDENCY_SCRIPT="${DEPENDENCY_SCRIPT:-${ROOT}/scripts/02_install_dependencies.sh}"
 CONFIGURE_SCRIPT="${CONFIGURE_SCRIPT:-${ROOT}/scripts/configure_services.sh}"
 START_SCRIPT="${START_SCRIPT:-${ROOT}/scripts/start_services.sh}"
@@ -19,6 +20,7 @@ START_SCRIPT="${START_SCRIPT:-${ROOT}/scripts/start_services.sh}"
 
 for file in \
     "$PROMETHEUS_CONF" \
+    "$ALERTS_CONF" \
     "$GRAFANA_CONF" \
     "$DATASOURCE_CONF" \
     "$LOKI_CONF" \
@@ -40,12 +42,18 @@ grep -q '127\.0\.0\.1:9100' "$PROMETHEUS_CONF" || \
     die "node_exporter target is not loopback-bound"
 grep -q '127\.0\.0\.1:9187' "$PROMETHEUS_CONF" || \
     die "postgres_exporter target is not loopback-bound"
+grep -q 'alerts\.yml' "$PROMETHEUS_CONF" || \
+    die "Prometheus configuration missing alerts.yml rule file reference"
 grep -q 'http_listen_port:[[:space:]]*3100' "$LOKI_CONF" || \
     die "Loki HTTP listen port is not configured to 3100"
 grep -q 'url:[[:space:]]*http://127\.0\.0\.1:3100/loki/api/v1/push' "$PROMTAIL_CONF" || \
     die "Promtail client push URL does not target loopback Loki"
+grep -A20 'pkg install -y' "$DEPENDENCY_SCRIPT" | grep -q 'postgres_exporter' || \
+    die "dependency installer does not install postgres_exporter"
 grep -Eq 'pkg install -y[[:space:]]+grafana-loki' "$DEPENDENCY_SCRIPT" || \
     die "dependency installer does not install the FreeBSD grafana-loki package"
+grep -q 'POSTGRES_EXPORTER_DSN=' "$CONFIGURE_SCRIPT" || \
+    die "configure_services.sh missing POSTGRES_EXPORTER_DSN configuration"
 grep -Eq 'sysrc loki_enable=YES loki_config=/usr/local/etc/loki\.yml' "$CONFIGURE_SCRIPT" || \
     die "Loki rc service is not configured to use /usr/local/etc/loki.yml"
 grep -Eq 'sysrc promtail_enable=YES promtail_config=/usr/local/etc/promtail\.yml' "$CONFIGURE_SCRIPT" || \
@@ -92,6 +100,10 @@ if command -v jq >/dev/null 2>&1; then
             *overview*)
                 grep -q 'node_network_receive_bytes_total' "$dashboard" || \
                     die "Grafana dashboard missing network metrics: $dashboard"
+                grep -q 'node_cpu_seconds_total' "$dashboard" || \
+                    die "Grafana dashboard missing CPU metrics: $dashboard"
+                grep -q 'Kea exporter' "$dashboard" || \
+                    die "Grafana dashboard missing Kea exporter status panel: $dashboard"
                 ;;
             *logs*)
                 grep -q 'count_over_time' "$dashboard" || \

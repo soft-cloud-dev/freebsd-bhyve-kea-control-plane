@@ -1,0 +1,47 @@
+groups:
+  - name: control_plane_alerts
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "{{ $labels.job }} target {{ $labels.instance }} has been unreachable for more than 1 minute."
+
+      - alert: PostgresqlDown
+        expr: up{job="postgresql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL Exporter is down"
+          description: "PostgreSQL metrics collector on {{ $labels.instance }} is unreachable."
+
+      - alert: KeaExporterDown
+        expr: up{job="kea"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kea Exporter is down"
+          description: "Kea DHCP metrics exporter on {{ $labels.instance }} is unreachable."
+
+      - alert: HighHostLoad
+        expr: node_load1 > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High host load detected"
+          description: "Host 1-minute load average is {{ $value }} (greater than 5) for 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes) / node_memory_MemTotal_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory utilization"
+          description: "Memory usage is above 90% for 5 minutes."

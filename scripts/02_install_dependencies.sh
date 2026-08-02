@@ -29,6 +29,7 @@ pkg install -y \
     grafana \
     jq \
     node_exporter \
+    postgres_exporter \
     postgresql16-client \
     postgresql16-contrib \
     postgresql16-server \

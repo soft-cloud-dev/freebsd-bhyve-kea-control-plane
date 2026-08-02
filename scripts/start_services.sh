@@ -12,6 +12,7 @@ STORK_ENABLE="${STORK_ENABLE:-yes}"
 DNS_ADDR="${DNS_ADDR:-10.0.20.1}"
 KEA_API_USER_FILE="${KEA_API_USER_FILE:-/usr/local/etc/kea/kea-api-user}"
 KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE:-/usr/local/etc/kea/kea-api-password}"
+POSTGRES_EXPORTER_DSN="${POSTGRES_EXPORTER_DSN:-postgresql://prometheus@127.0.0.1:5432/inventory?sslmode=disable}"
 
 case "$LOKI_READY_TIMEOUT" in
     ''|*[!0-9]*|0) die "LOKI_READY_TIMEOUT must be a positive integer" ;;
@@ -68,7 +69,7 @@ if command -v container >/dev/null 2>&1 && ! command -v jail >/dev/null 2>&1; th
     container_is_running kea || container run -d --name kea -p 8000:8000 -v /usr/local/etc/kea:/etc/kea kea:latest || container start kea || true
     container_is_running node-exporter || container run -d --name node-exporter -p 9100:9100 prom/node-exporter:latest || container start node-exporter || true
     container_is_running prometheus || container run -d --name prometheus -p 9090:9090 -v /usr/local/etc/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus:latest || container start prometheus || true
-    container_is_running postgres-exporter || container run -d --name postgres-exporter -p 9187:9187 prometheuscommunity/postgres-exporter:latest || container start postgres-exporter || true
+    container_is_running postgres-exporter || container run -d --name postgres-exporter -p 9187:9187 -e DATA_SOURCE_NAME="${POSTGRES_EXPORTER_DSN}" prometheuscommunity/postgres-exporter:latest || container start postgres-exporter || true
     container_is_running grafana || container run -d --name grafana -p 3000:3000 -v /usr/local/etc/grafana:/etc/grafana grafana/grafana:latest || container start grafana || true
     container_is_running loki || container run -d --name loki -p 3100:3100 -v /usr/local/etc/loki.yml:/etc/loki/local-config.yaml grafana/loki:latest || container start loki || true
     container_is_running promtail || container run -d --name promtail -v /var/log:/var/log:ro -v /usr/local/etc/promtail.yml:/etc/promtail/config.yml grafana/promtail:latest || container start promtail || true

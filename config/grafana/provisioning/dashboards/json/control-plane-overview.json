@@ -37,7 +37,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
       "id": 1,
       "options": {
         "colorMode": "value",
@@ -89,7 +89,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
       "id": 2,
       "options": {
         "colorMode": "value",
@@ -141,7 +141,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
       "id": 3,
       "options": {
         "colorMode": "value",
@@ -172,12 +172,64 @@
       },
       "fieldConfig": {
         "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": { "text": "DOWN" },
+                "1": { "text": "UP" }
+              },
+              "type": "value"
+            }
+          ],
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [ "lastNotNull" ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"kea\"}",
+          "legendFormat": "Kea exporter",
+          "refId": "A"
+        }
+      ],
+      "title": "Kea Exporter",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
           "unit": "s"
         },
         "overrides": []
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
-      "id": 4,
+      "id": 5,
       "options": {
         "legend": {
           "calcs": [ "lastNotNull", "max" ],
@@ -210,7 +262,7 @@
         "overrides": []
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
-      "id": 5,
+      "id": 6,
       "options": {
         "legend": {
           "calcs": [ "lastNotNull", "max" ],
@@ -240,12 +292,89 @@
       },
       "fieldConfig": {
         "defaults": {
-          "noValue": "0"
+          "noValue": "0",
+          "unit": "percent"
         },
         "overrides": []
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
-      "id": 6,
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [ "lastNotNull", "max" ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100) or vector(0)",
+          "legendFormat": "CPU utilization %",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU Utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [ "lastNotNull", "max" ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes or node_memory_active_bytes or vector(0)",
+          "legendFormat": "Used Memory",
+          "refId": "A"
+        },
+        {
+          "expr": "node_memory_MemFree_bytes or node_memory_free_bytes or vector(0)",
+          "legendFormat": "Free Memory",
+          "refId": "B"
+        }
+      ],
+      "title": "Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "id": 9,
       "options": {
         "legend": {
           "calcs": [ "lastNotNull", "max" ],
@@ -263,9 +392,14 @@
           "expr": "pg_stat_database_numbackends{datname=\"inventory\"} or pg_stat_database_numbackends{datname=\"postgres\"} or pg_stat_database_numbackends or vector(0)",
           "legendFormat": "inventory connections",
           "refId": "A"
+        },
+        {
+          "expr": "rate(pg_stat_database_xact_commit[5m]) or vector(0)",
+          "legendFormat": "commits/sec",
+          "refId": "B"
         }
       ],
-      "title": "Inventory Database Connections",
+      "title": "Inventory Database Connections & Activity",
       "type": "timeseries"
     },
     {
@@ -279,8 +413,8 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
-      "id": 7,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "id": 10,
       "options": {
         "legend": {
           "calcs": [ "lastNotNull" ],
@@ -298,9 +432,91 @@
           "expr": "prometheus_tsdb_head_series",
           "legendFormat": "active series",
           "refId": "A"
+        },
+        {
+          "expr": "pg_database_size_bytes{datname=\"inventory\"} or pg_database_size_bytes or vector(0)",
+          "legendFormat": "DB size (bytes)",
+          "refId": "B"
         }
       ],
-      "title": "Prometheus Active Series",
+      "title": "Prometheus Active Series & DB Size",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [ "lastNotNull", "max" ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "stork_kea_dhcp4_leases or dhcp4_assigned_addresses or vector(0)",
+          "legendFormat": "Assigned DHCP4 Leases",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(dhcp4_pkt4_received_total[5m]) or vector(0)",
+          "legendFormat": "DHCP4 Packets Received/s",
+          "refId": "B"
+        }
+      ],
+      "title": "Kea DHCP Statistics",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [ "lastNotNull", "max" ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 - ((node_filesystem_avail_bytes{fstype!=\"tmpfs\"} / node_filesystem_size_bytes{fstype!=\"tmpfs\"}) * 100) or vector(0)",
+          "legendFormat": "{{mountpoint}} used %",
+          "refId": "A"
+        }
+      ],
+      "title": "Filesystem Capacity",
       "type": "timeseries"
     },
     {
@@ -315,8 +531,8 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
-      "id": 8,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 37 },
+      "id": 13,
       "options": {
         "legend": {
           "calcs": [ "lastNotNull", "max" ],
@@ -356,8 +572,8 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
-      "id": 9,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 37 },
+      "id": 14,
       "options": {
         "legend": {
           "calcs": [ "lastNotNull", "max" ],
@@ -397,8 +613,8 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 29 },
-      "id": 10,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 45 },
+      "id": 15,
       "options": {
         "legend": {
           "calcs": [ "lastNotNull", "max" ],
@@ -450,6 +666,6 @@
   "timezone": "browser",
   "title": "FreeBSD Control Plane Overview",
   "uid": "freebsd-control-plane",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

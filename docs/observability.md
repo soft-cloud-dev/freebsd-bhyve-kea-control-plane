@@ -17,6 +17,7 @@ Prometheus, Loki, Promtail, and all exporters bind to loopback. Grafana is expos
 
 ```sh
 install -m 0644 config/prometheus.yml /usr/local/etc/prometheus.yml
+install -m 0644 config/alerts.yml /usr/local/etc/alerts.yml
 install -m 0644 config/loki.yml /usr/local/etc/loki.yml
 install -m 0644 config/promtail.yml /usr/local/etc/promtail.yml
 install -m 0644 config/grafana.ini /usr/local/etc/grafana/grafana.ini
