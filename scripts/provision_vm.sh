@@ -267,20 +267,11 @@ if [ -c "$zvol_dev" ] || [ -b "$zvol_dev" ]; then
     dd if="$FREEBSD_CLOUD_IMAGE_CACHE" of="$zvol_dev" bs=1M status=none
 fi
 
-echo "[2/7] Reading VM MAC address"
-MAC_ADDRESS=$(vm info "$VM_NAME" | awk '
-    tolower($0) ~ /mac/ {
-        for (i = 1; i <= NF; i++) {
-            val = tolower($i)
-            sub(/^mac=/, "", val)
-            if (val ~ /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/) {
-                print val
-                exit
-            }
-        }
-    }
-')
-[ -n "$MAC_ADDRESS" ] || die "could not determine VM MAC address"
+echo "[2/7] Generating VM MAC address"
+mac_suffix=$(printf '%s' "$VM_NAME" | md5 -q | cut -c1-6 | sed 's/\(..\)/\1:/g; s/:$//')
+MAC_ADDRESS="58:9c:fc:${mac_suffix}"
+sysrc -f "$VM_CONFIG" network0_mac="$MAC_ADDRESS" >/dev/null
+echo " - assigned deterministic MAC: $MAC_ADDRESS"
 
 echo "[3/7] Creating cloud-init NoCloud seed"
 seed_dir=$(mktemp -d "${TMPDIR:-/tmp}/${VM_NAME}.cloud-init.XXXXXX")
