@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soft-cloud.dev/schemas/bkcp/site-v1.schema.json",
+  "title": "BKCP site configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "control_plane_id", "host", "database", "kea", "network", "pools", "images"],
+  "properties": {
+    "schema": {"const": 1},
+    "control_plane_id": {"type": "string", "minLength": 1},
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["external_interface", "management_interface", "vm_bridge", "vm_dataset", "vm_root"],
+      "properties": {
+        "external_interface": {"type": "string", "minLength": 1},
+        "management_interface": {"type": "string", "minLength": 1},
+        "vm_bridge": {"type": "string", "minLength": 1},
+        "vm_dataset": {"type": "string", "minLength": 1},
+        "vm_root": {"type": "string", "pattern": "^/"}
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dsn"],
+      "properties": {"dsn": {"type": "string", "minLength": 1}}
+    },
+    "kea": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api_url", "username_file", "password_file", "hosts_database"],
+      "properties": {
+        "api_url": {"type": "string", "format": "uri"},
+        "username_file": {"type": "string", "pattern": "^/"},
+        "password_file": {"type": "string", "pattern": "^/"},
+        "hosts_database": {"type": "string", "minLength": 1},
+        "request_timeout_ms": {"type": "integer", "minimum": 0}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pf_anchor", "manage_anchor"],
+      "properties": {
+        "pf_anchor": {"type": "string", "minLength": 1},
+        "manage_anchor": {"type": "boolean"}
+      }
+    },
+    "pools": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "subnet", "first_host", "last_host", "gateway", "dns_servers", "vlan", "kea_subnet_id"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "subnet": {"type": "string", "minLength": 1},
+          "first_host": {"type": "string", "format": "ipv4"},
+          "last_host": {"type": "string", "format": "ipv4"},
+          "gateway": {"type": "string", "format": "ipv4"},
+          "dns_servers": {"type": "array", "items": {"type": "string", "format": "ipv4"}},
+          "vlan": {"type": "integer", "minimum": 0, "maximum": 4094},
+          "kea_subnet_id": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "images": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "url", "compressed_sha256", "format", "loader"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "url": {"type": "string", "format": "uri", "pattern": "^https://"},
+          "compressed_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "format": {"const": "raw.xz"},
+          "loader": {"enum": ["bhyveload", "uefi"]}
+        }
+      }
+    }
+  }
+}
