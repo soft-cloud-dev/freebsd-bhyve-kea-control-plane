@@ -1,6 +1,9 @@
 package allocation
 
-import "testing"
+import (
+	"net"
+	"testing"
+)
 
 func TestAddressesInclusive(t *testing.T) {
 	addresses, err := Addresses("10.0.20.10", "10.0.20.12")
@@ -19,12 +22,12 @@ func TestMACDeterministicAndLocal(t *testing.T) {
 	if first != second || first == other {
 		t.Fatalf("unexpected identity first=%s second=%s other=%s", first, second, other)
 	}
-	if first[:2] != "02" && first[:2] != "06" && first[:2] != "0a" && first[:2] != "0e" {
-		// The low two bits must encode locally administered unicast. The higher bits are hash-derived.
-		var firstOctet uint8
-		if _, err := fmt.Sscanf(first[:2], "%02x", &firstOctet); err != nil || firstOctet&0x03 != 0x02 {
-			t.Fatalf("not a locally administered unicast MAC: %s", first)
-		}
+	parsed, err := net.ParseMAC(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed[0]&0x03 != 0x02 {
+		t.Fatalf("not a locally administered unicast MAC: %s", first)
 	}
 }
 
