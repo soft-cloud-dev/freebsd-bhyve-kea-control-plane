@@ -32,17 +32,17 @@ bin/cpctl status --config /usr/local/etc/bkcp/site.toml
 bin/cpctl plan --config /usr/local/etc/bkcp/site.toml --file ./vm.toml --generation 1 --json
 ```
 
-Stop at `plan`.
+Stop at `plan` until the V2 execution vertical slice is implemented.
 
 ## Documentation
 
 1. [Getting Started](Getting-Started)
-2. [Bare-Metal Three-Node Bootstrap](Bare-Metal-Three-Node-Bootstrap)
+2. [V2-Only Bare-Metal Three-Node Bootstrap](Bare-Metal-Three-Node-Bootstrap)
 3. [Architecture](Architecture)
 4. [CLI and Operations](CLI-and-Operations)
 5. [Development and Roadmap](Development-and-Roadmap)
 
-The bare-metal runbook uses the frozen `legacy/v1-shell` implementation for host and VM mutation, then installs V2 alongside it for validation, state migrations, and deterministic planning. It does not treat V1-created guests as V2-managed resources.
+The bare-metal runbook defines the V2-only target. It does not require `legacy/v1-shell`. It separates manual FreeBSD host prerequisites from the V2 capabilities still required for allocation, observation, typed infrastructure drivers, resumable execution, and public `apply`.
 
 ## Fixed rules
 
@@ -50,7 +50,7 @@ The bare-metal runbook uses the frozen `legacy/v1-shell` implementation for host
 - Keep declared, allocated, observed, and effective state separate.
 - Never convert unavailable evidence into confirmed absence.
 - Restrict PF ownership to the configured anchor.
-- Preserve V1 identities during future adoption.
+- Allocate and manage new resources directly through V2.
 
 ## Authoritative repository documents
 
@@ -59,4 +59,4 @@ The bare-metal runbook uses the frozen `legacy/v1-shell` implementation for host
 - [State contract](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/STATE.md)
 - [Migration policy](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/MIGRATION.md)
 
-V1 is frozen on `legacy/v1-shell`. No V1 resource is managed by V2 until explicit import and adoption succeed.
+V1 is frozen on `legacy/v1-shell` for existing installations only. New V2-only environments do not need to create V1 resources or pass through V1 adoption.
