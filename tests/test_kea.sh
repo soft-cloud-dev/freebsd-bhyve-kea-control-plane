@@ -47,10 +47,10 @@ grep -Eq 'reinstall clean' "$DEPENDENCY_SCRIPT" || \
     die "dependency installer does not replace the binary Kea package"
 grep -Eq 'kea-admin db-init pgsql' "$KEA_DB_INIT_SCRIPT" || \
     die "Kea hosts database initializer does not create a PostgreSQL schema"
-grep -Eq 'command:"host-add"' "$PROVISION_SCRIPT" || \
-    die "VM provisioner does not use Kea host-add"
-grep -Eq 'command:"host-del"' "$ROLLBACK_SCRIPT" || \
-    die "VM rollback does not use Kea host-del"
+grep -Eq 'command:"reservation-add"' "$PROVISION_SCRIPT" || \
+    die "VM provisioner does not use Kea reservation-add"
+grep -Eq 'command:"reservation-del"' "$ROLLBACK_SCRIPT" || \
+    die "VM rollback does not use Kea reservation-del"
 grep -Eq "status <> 'archived'" "$PROVISION_SCRIPT" || \
     die "VM provisioner does not reject an active inventory name"
 preflight_line=$(grep -n 'active_vm=.*psql' "$PROVISION_SCRIPT" | sed -n '1s/:.*//p')
@@ -58,7 +58,7 @@ create_line=$(grep -n 'vm create -t' "$PROVISION_SCRIPT" | sed -n '1s/:.*//p')
 [ -n "$preflight_line" ] && [ -n "$create_line" ] && [ "$preflight_line" -lt "$create_line" ] || \
     die "VM inventory preflight must run before vm-bhyve creation"
 grep -Eq 'delete_result.*-eq 3' "$ROLLBACK_SCRIPT" || \
-    die "VM rollback does not tolerate an already-absent Kea host"
+    die "VM rollback does not tolerate an already-absent Kea reservation"
 grep -Eq 'if vm info "\$VM_NAME"' "$ROLLBACK_SCRIPT" || \
     die "VM rollback does not tolerate an already-absent vm-bhyve guest"
 grep -Eq 'RETURNING uuid, ip_address, pool_id, vlan' "$PROVISION_SCRIPT" || \

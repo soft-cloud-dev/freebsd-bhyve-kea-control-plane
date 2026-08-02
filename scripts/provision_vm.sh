@@ -173,27 +173,29 @@ rollback() {
                 --arg mac "$MAC_ADDRESS" \
                 --argjson subnet_id "$KEA_SUBNET_ID" \
                 '{
-                    command:"host-del",
+                    command:"reservation-del",
                     arguments:{
-                        "ipv4-subnet-id":$subnet_id,
-                        "hw-address":$mac
+                        "subnet-id":$subnet_id,
+                        "identifier-type":"hw-address",
+                        identifier:$mac
                     }
                 }')
-            delete_response=$(kea_request "$delete_payload" 2>/dev/null || true)
-            delete_result=$(printf '%s' "$delete_response" | jq -er '.[0].result' 2>/dev/null || echo "1")
-            if [ "$delete_result" -ne 0 ] && [ "$delete_result" -ne 3 ]; then
-                fallback_payload=$(jq -n \
-                    --arg mac "$MAC_ADDRESS" \
-                    --argjson subnet_id "$KEA_SUBNET_ID" \
-                    '{
-                        command:"reservation-del",
-                        arguments:{
-                            "subnet-id":$subnet_id,
-                            "identifier-type":"hw-address",
-                            identifier:$mac
-                        }
-                    }')
-                kea_request "$fallback_payload" >/dev/null 2>&1 || true
+            kea_request "$delete_payload" >/dev/null 2>&1 || true
+
+            if [ -w "/usr/local/etc/kea/kea-dhcp4.conf" ] || [ -f "/usr/local/etc/kea/kea-dhcp4.conf" ]; then
+                tmp_conf=$(mktemp)
+                jq --arg mac "$MAC_ADDRESS" \
+                   --argjson subnet_id "$KEA_SUBNET_ID" '
+                   .Dhcp4.subnet4 |= map(
+                       if .id == $subnet_id then
+                           .reservations = ((.reservations // []) | map(select(.["hw-address"] != $mac)))
+                       else
+                           .
+                       end
+                   )
+                ' /usr/local/etc/kea/kea-dhcp4.conf > "$tmp_conf" 2>/dev/null && \
+                cat "$tmp_conf" > /usr/local/etc/kea/kea-dhcp4.conf 2>/dev/null && \
+                rm -f "$tmp_conf"
             fi
         fi
 
@@ -347,20 +349,38 @@ add_payload=$(jq -n \
     --arg hostname "$VM_NAME" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
     '{
-        command:"host-add",
+        command:"reservation-add",
         arguments:{
-            host:{
-                "ipv4-subnet-id":$subnet_id,
+            reservation:{
+                "subnet-id":$subnet_id,
                 "hw-address":$mac,
-                "ipv4-address":$ip,
+                "ip-address":$ip,
                 hostname:$hostname
             }
         }
     }')
 add_response=$(kea_request "$add_payload")
 add_result=$(printf '%s' "$add_response" | jq -er '.[0].result')
-[ "$add_result" -eq 0 ] || die "Kea host-add failed: $add_response"
+[ "$add_result" -eq 0 ] || die "Kea reservation-add failed: $add_response"
 kea_reserved=1
+
+if [ -w "/usr/local/etc/kea/kea-dhcp4.conf" ] || [ -f "/usr/local/etc/kea/kea-dhcp4.conf" ]; then
+    tmp_conf=$(mktemp)
+    jq --arg mac "$MAC_ADDRESS" \
+       --arg ip "$IP_ADDRESS" \
+       --arg hostname "$VM_NAME" \
+       --argjson subnet_id "$KEA_SUBNET_ID" '
+       .Dhcp4.subnet4 |= map(
+           if .id == $subnet_id then
+               .reservations = (.reservations // []) + [{"hw-address": $mac, "ip-address": $ip, "hostname": $hostname}]
+           else
+               .
+           end
+       )
+    ' /usr/local/etc/kea/kea-dhcp4.conf > "$tmp_conf" && \
+    cat "$tmp_conf" > /usr/local/etc/kea/kea-dhcp4.conf && \
+    rm -f "$tmp_conf"
+fi
 
 echo "[6/7] Starting VM"
 vm start "$VM_NAME"
