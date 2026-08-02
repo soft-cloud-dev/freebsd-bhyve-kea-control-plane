@@ -1,15 +1,15 @@
 # CLI and Operations
 
-## Command summary
+## Command surface
 
-```text
-cpctl doctor [--config PATH] [--offline] [--json]
-cpctl plan --file VM.toml [--config PATH] [--generation N] [--json]
-cpctl migrate [--config PATH] [--dry-run] [--json]
-cpctl status [--config PATH] [--json]
-cpctl inspect NAME [--config PATH] [--json]
-cpctl version
-```
+| Command | Purpose | Writes external infrastructure |
+|---|---|---|
+| `cpctl doctor` | Validate configuration and probe dependencies | No |
+| `cpctl plan` | Build a deterministic plan | No |
+| `cpctl migrate` | Inspect or apply embedded PostgreSQL migrations | PostgreSQL schema only |
+| `cpctl status` | List known resources | No |
+| `cpctl inspect NAME` | Show declaration, allocation, effective state, operation, steps, and resume point | No |
+| `cpctl version` | Print the binary version | No |
 
 Default configuration path:
 
@@ -17,90 +17,86 @@ Default configuration path:
 /usr/local/etc/bkcp/site.toml
 ```
 
-## `doctor`
-
-Validates site configuration and host dependencies.
-
-Offline structural check:
+## Standard operator sequence
 
 ```sh
 cpctl doctor --config /usr/local/etc/bkcp/site.toml --offline
+cpctl doctor --config /usr/local/etc/bkcp/site.toml
+cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run --json
+cpctl migrate --config /usr/local/etc/bkcp/site.toml
+cpctl status --config /usr/local/etc/bkcp/site.toml
+cpctl plan --config /usr/local/etc/bkcp/site.toml --file ./vm.toml --generation 1 --json
 ```
 
-Live check:
+Stop at `plan`.
+
+## Site configuration
+
+`cpctl` strictly decodes TOML. Unknown keys and invalid values are rejected.
+
+| Section | Important fields |
+|---|---|
+| Root | `schema`, stable `control_plane_id` |
+| `[host]` | interfaces, VM bridge, ZFS dataset, VM root |
+| `[database]` | PostgreSQL DSN |
+| `[kea]` | API URL, credential-file paths, hosts database, timeout |
+| `[network]` | PF anchor and management policy |
+| `[[pools]]` | subnet, range, gateway, DNS, VLAN, Kea subnet ID |
+| `[[images]]` | name, URL, compressed SHA-256, format, loader |
+
+Rules:
+
+- Keep `control_plane_id` stable after initialization.
+- Do not store Kea credentials directly in TOML; reference files.
+- Reject the all-zero image digest before any future execution.
+- Keep PF ownership inside the configured anchor.
+
+## VM manifest
+
+| Field | Meaning |
+|---|---|
+| `name` | Stable resource name |
+| `owner` | Administrative label |
+| `image` | Site image name |
+| `profile` | Guest profile intent |
+| `pool` | Site pool name |
+| `desired_power` | Requested power state |
+| `cpus`, `memory_mb`, `disk_gb` | Guest resources |
+| `ssh_public_key_file` | Public-key path; contents are not persisted |
+
+`plan` rejects unknown image or pool references.
+
+## Migration behavior
+
+Migrations are embedded in `cpctl`, run in version order, and are protected by a PostgreSQL advisory lock. Applied versions are recorded with SHA-256 checksums in `bkcp.schema_migrations`.
 
 ```sh
-cpctl doctor --config /usr/local/etc/bkcp/site.toml --timeout 20s
-```
-
-Machine-readable output:
-
-```sh
-cpctl doctor --config /usr/local/etc/bkcp/site.toml --json
-```
-
-A failed required probe returns the dependency-unavailable exit code.
-
-## `plan`
-
-Builds a deterministic apply plan without writing PostgreSQL or changing the host.
-
-```sh
-cpctl plan \
-  --config /usr/local/etc/bkcp/site.toml \
-  --file ./freebsd-node-01.toml \
-  --generation 1 \
-  --json
-```
-
-The output includes:
-
-- resource name;
-- generation;
-- specification digest;
-- plan digest;
-- idempotency key;
-- ordered steps with driver, action, and input digest.
-
-The caller supplies the generation because this pure command does not consult state. The internal transactional preparation path assigns generations from PostgreSQL.
-
-## `migrate`
-
-Reports or applies embedded PostgreSQL migrations.
-
-```sh
-cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run
+cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run --json
 cpctl migrate --config /usr/local/etc/bkcp/site.toml
 ```
 
-Use `--dry-run` before deploying a new binary. Checksum mismatch is blocked rather than silently accepted.
+Repeated migration is a no-op when versions and checksums match. A checksum mismatch is blocked. Restore the released migration and add a new migration version; never edit the checksum row.
 
-## `status`
+V2 tables:
 
-Lists known resources and their current state summary.
+- `bkcp.resources` — stable identity and current generation;
+- `bkcp.vm_specs` — append-only declared intent;
+- `bkcp.vm_allocations` — durable assignments;
+- `bkcp.vm_observations` — evidence snapshots;
+- `bkcp.vm_effective` — derived state and reason;
+- `bkcp.operations` — operation headers;
+- `bkcp.operation_steps` — ordered resumable work.
+
+## Inspection
 
 ```sh
 cpctl status --config /usr/local/etc/bkcp/site.toml
-cpctl status --config /usr/local/etc/bkcp/site.toml --json
+cpctl inspect freebsd-node-01 --config /usr/local/etc/bkcp/site.toml --json
 ```
 
-This command is read-only.
-
-## `inspect`
-
-Shows one resource's current declaration, allocation if present, effective state, latest operation, ordered steps, and future resume point.
-
-```sh
-cpctl inspect freebsd-node-01 \
-  --config /usr/local/etc/bkcp/site.toml \
-  --json
-```
-
-An unknown resource returns the not-found exit code.
+`inspect` reports the first step not marked `succeeded` or `skipped` as the future resume point. No current command executes or advances that step.
 
 ## JSON envelope
-
-Machine-readable output uses a versioned envelope:
 
 ```json
 {
@@ -127,25 +123,23 @@ Consumers must tolerate backward-compatible field additions while `schema` remai
 | `7` | Resource not found |
 | `70` | Internal error |
 
-## Operator sequence
-
-Use this sequence on a fresh V2 environment:
-
-```sh
-cpctl doctor --config /usr/local/etc/bkcp/site.toml --offline
-cpctl doctor --config /usr/local/etc/bkcp/site.toml
-cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run --json
-cpctl migrate --config /usr/local/etc/bkcp/site.toml
-cpctl status --config /usr/local/etc/bkcp/site.toml
-cpctl plan --config /usr/local/etc/bkcp/site.toml --file ./vm.toml --generation 1 --json
-```
-
-Stop at `plan`. There is no supported external execution command yet.
-
 ## Failure handling
 
-- Configuration errors: fix the TOML; do not bypass strict decoding.
-- PostgreSQL unavailable: restore connectivity or authentication, then retry.
-- Migration checksum mismatch: stop, restore the released migration content, and diagnose the binary/database version pairing.
-- Resource not found: verify the resource name and that state preparation has actually occurred.
-- Unexpected operation state: inspect PostgreSQL and external systems independently; do not mark steps successful without verified postconditions.
+- Invalid TOML: correct the source; do not bypass strict decoding.
+- PostgreSQL unavailable: restore connectivity or authentication and retry.
+- Migration checksum mismatch: stop and restore the released migration content.
+- Resource not found: verify the name and whether preparation has occurred.
+- Unexpected operation state: inspect PostgreSQL and authoritative external systems independently.
+- Unknown evidence: retain it as unknown; do not mark absence or success manually.
+
+## Backup and recovery
+
+Before upgrades:
+
+- take a PostgreSQL-consistent backup;
+- retain the exact `cpctl` release associated with applied migrations;
+- keep site and VM manifests in version control;
+- preserve externally assigned identities;
+- verify external postconditions before repairing operation state.
+
+Down migrations are intentionally not automatic.

@@ -1,21 +1,21 @@
 # Getting Started
 
-## Prerequisites
+This path initializes the current V2 control-plane state and produces a deterministic VM plan. It does not create a VM.
 
-The portable development workflow requires the Go version declared in `go.mod` and GNU-compatible `make`.
+## 1. Prepare the environment
 
-A target deployment also requires:
+Development requires the Go version declared in `go.mod` and GNU-compatible `make`.
 
-- FreeBSD with hardware virtualization enabled;
-- ZFS and a dataset reserved for VM storage;
+A live FreeBSD control-plane host also needs:
+
+- hardware virtualization;
+- ZFS and a VM dataset;
 - `vm-bhyve`;
 - PostgreSQL 16;
-- Kea DHCP4 and its Control Agent for future reservation execution;
-- PF configuration capable of loading a dedicated `bkcp` anchor.
+- Kea DHCP4 and Control Agent;
+- a PF ruleset that can load a dedicated `bkcp` anchor.
 
-The current implementation can be built and tested on non-FreeBSD systems. Live host validation and future infrastructure drivers target FreeBSD.
-
-## Clone, verify, and build
+## 2. Build and verify
 
 ```sh
 git clone https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane.git
@@ -26,7 +26,7 @@ make build
 
 The binary is written to `bin/cpctl`.
 
-## Create the site configuration
+## 3. Create `site.toml`
 
 ```sh
 install -d -m 0750 /usr/local/etc/bkcp
@@ -34,13 +34,20 @@ cp config/site.example.toml /usr/local/etc/bkcp/site.toml
 vi /usr/local/etc/bkcp/site.toml
 ```
 
-Set a stable `control_plane_id`. Do not change it after state has been initialized because it participates in deterministic operation identity and per-resource locking.
+Set the real values for:
 
-Replace the example image checksum before any future image-fetch or apply capability is used. The all-zero digest is a validation sentinel, not a trusted image digest.
+- `control_plane_id`;
+- FreeBSD interfaces, bridge, ZFS dataset, and mount path;
+- PostgreSQL DSN;
+- Kea endpoint and credential-file paths;
+- address pools and Kea subnet IDs;
+- images and independently verified SHA-256 digests.
 
-## Validate configuration and dependencies
+Keep `control_plane_id` stable after state initialization. The all-zero image digest in the example is a validation sentinel and must not be trusted for execution.
 
-Validate structure without contacting services:
+## 4. Validate the host contract
+
+Offline configuration validation:
 
 ```sh
 bin/cpctl doctor \
@@ -48,16 +55,18 @@ bin/cpctl doctor \
   --offline
 ```
 
-Run live dependency probes on the FreeBSD control-plane host:
+Live dependency probes on FreeBSD:
 
 ```sh
 bin/cpctl doctor \
   --config /usr/local/etc/bkcp/site.toml
 ```
 
-## Initialize PostgreSQL state
+`doctor` is read-only.
 
-Review pending migrations first:
+## 5. Initialize PostgreSQL state
+
+Review embedded migrations:
 
 ```sh
 bin/cpctl migrate \
@@ -73,23 +82,25 @@ bin/cpctl migrate \
   --config /usr/local/etc/bkcp/site.toml
 ```
 
-Inspect the empty state inventory:
+Check the inventory:
 
 ```sh
 bin/cpctl status \
   --config /usr/local/etc/bkcp/site.toml
 ```
 
-## Create and inspect a VM manifest
+All V2 objects are created under the `bkcp` schema. Legacy V1 objects under `public` remain untouched.
 
-Start with the checked-in example:
+## 6. Create a VM manifest
 
 ```sh
 cp config/vms/freebsd-node.example.toml ./freebsd-node-01.toml
 vi ./freebsd-node-01.toml
 ```
 
-Generate a deterministic plan without changing the database or host:
+A manifest names a declared site image and pool and defines CPU, memory, disk, owner, power intent, profile, and SSH public-key path.
+
+## 7. Produce a deterministic plan
 
 ```sh
 bin/cpctl plan \
@@ -99,10 +110,10 @@ bin/cpctl plan \
   --json
 ```
 
-There is no public `apply` command yet. Plan output must be treated as a preview and execution contract only.
+The pure `plan` command does not consult or modify PostgreSQL. It emits normalized intent, digests, an idempotency key, and ordered future driver steps.
 
-## Next reading
+## Stop condition
 
-- [Configuration](Configuration.md)
-- [CLI and Operations](CLI-and-Operations.md)
-- [State and Migrations](State-and-Migrations.md)
+There is no public `apply` command. Do not interpret a plan or persisted operation as proof that Kea, ZFS, PF, cloud-init, images, or `vm-bhyve` changed.
+
+Continue with [CLI and Operations](CLI-and-Operations.md) for command and configuration details.
