@@ -1,0 +1,67 @@
+name: Add Observation Domains
+
+on:
+  push:
+    branches: [feat/v2-execution]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v2-execution
+      - name: Persist image and PF states
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('internal/state/postgres/execution.go')
+          text = path.read_text()
+          old = '''INSERT INTO bkcp.vm_observations(resource_uuid,observer_version,vm_state,storage_state,kea_state,seed_state,power_state,observed,error_code,error_detail,plan_digest)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,'')) RETURNING uuid::text`, observation.ResourceUUID, observation.ObserverVersion, observation.VMState, observation.StorageState, observation.KeaState, observation.SeedState, observation.PowerState, observed, nullString(observation.ErrorCode), nullString(observation.ErrorDetail), observation.PlanDigest).Scan(&uuid)'''
+          new = '''INSERT INTO bkcp.vm_observations(resource_uuid,observer_version,vm_state,storage_state,kea_state,seed_state,image_state,pf_state,power_state,observed,error_code,error_detail,plan_digest)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')) RETURNING uuid::text`,
+          \t\tobservation.ResourceUUID, observation.ObserverVersion,
+          \t\tobservation.VMState, observation.StorageState, observation.KeaState, observation.SeedState,
+          \t\tobservation.ImageState, observation.PFState, observation.PowerState, observed,
+          \t\tnullString(observation.ErrorCode), nullString(observation.ErrorDetail), observation.PlanDigest,
+          \t).Scan(&uuid)'''
+          if old not in text:
+              raise SystemExit('record observation SQL not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          path = Path('internal/state/postgres/repository.go')
+          text = path.read_text()
+          old = '''SELECT uuid::text, resource_uuid::text, collected_at, observer_version,
+                 vm_state, storage_state, kea_state, seed_state, power_state, observed,
+                 COALESCE(error_code, ''), COALESCE(error_detail, ''), COALESCE(plan_digest, '')'''
+          new = '''SELECT uuid::text, resource_uuid::text, collected_at, observer_version,
+                 vm_state, storage_state, kea_state, seed_state, image_state, pf_state, power_state, observed,
+                 COALESCE(error_code, ''), COALESCE(error_detail, ''), COALESCE(plan_digest, '')'''
+          if old not in text:
+              raise SystemExit('inspect observation query not found')
+          text = text.replace(old, new, 1)
+          old = '''&observation.VMState, &observation.StorageState, &observation.KeaState, &observation.SeedState, &observation.PowerState,
+          \t\t&observedJSON, &observation.ErrorCode, &observation.ErrorDetail, &observation.PlanDigest,'''
+          new = '''&observation.VMState, &observation.StorageState, &observation.KeaState, &observation.SeedState,
+          \t\t&observation.ImageState, &observation.PFState, &observation.PowerState,
+          \t\t&observedJSON, &observation.ErrorCode, &observation.ErrorDetail, &observation.PlanDigest,'''
+          if old not in text:
+              raise SystemExit('inspect observation scan not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          gofmt -w internal/state/postgres/execution.go internal/state/postgres/repository.go
+      - name: Commit observation domains
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/state/postgres/execution.go internal/state/postgres/repository.go
+          git commit -m 'feat(state): persist image and PF observations'
+          git push origin HEAD:feat/v2-execution
