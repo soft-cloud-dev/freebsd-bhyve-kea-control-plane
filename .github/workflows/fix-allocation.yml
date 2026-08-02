@@ -1,0 +1,48 @@
+name: Fix Allocation Row State
+
+on:
+  push:
+    branches: [feat/v2-execution]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v2-execution
+      - name: Separate row state from later errors
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('internal/state/postgres/execution.go')
+          text = path.read_text()
+          text = text.replace(
+              'allocated, err := loadAllocationTx(ctx, tx, resourceUUID)\n\tif err == nil && allocated.ReleasedAt == nil {',
+              'allocated, loadErr := loadAllocationTx(ctx, tx, resourceUUID)\n\tif loadErr == nil && allocated.ReleasedAt == nil {',
+              1,
+          )
+          text = text.replace(
+              'if err != nil && !errors.Is(err, pgx.ErrNoRows) {\n\t\treturn state.Allocation{}, err\n\t}',
+              'if loadErr != nil && !errors.Is(loadErr, pgx.ErrNoRows) {\n\t\treturn state.Allocation{}, loadErr\n\t}',
+              1,
+          )
+          marker = 'allocated = state.Allocation{PoolName: pool.Name, IPAddress: ipAddress, MACAddress: macAddress, DatasetName: allocation.Dataset(site.Host.VMDataset, resourceName), ZvolName: allocation.Zvol(site.Host.VMDataset, resourceName), KeaSubnetID: pool.KeaSubnetID, ImageName: image.Name, ImageDigest: image.CompressedSHA256, AllocationGeneration: generation}\n\tif err == nil {'
+          replacement = marker[:-len('if err == nil {')] + 'if loadErr == nil {'
+          if marker not in text:
+              raise SystemExit('allocation persistence marker not found')
+          text = text.replace(marker, replacement, 1)
+          path.write_text(text)
+          PY
+          gofmt -w internal/state/postgres/execution.go
+      - name: Commit correction
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/state/postgres/execution.go
+          git commit -m 'fix(state): insert first durable allocation'
+          git push origin HEAD:feat/v2-execution
