@@ -63,6 +63,17 @@ grep -q 'http://127\.0\.0\.1:3100/ready' "$START_SCRIPT" || \
 grep -q 'LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT:-60}"' "$START_SCRIPT" || \
     die "service startup does not allow enough time for Loki readiness"
 
+grep -q 'http_listen_address:[[:space:]]*127\.0\.0\.1' "$LOKI_CONF" || \
+    die "Loki is not bound to loopback; http_listen_address must be 127.0.0.1"
+grep -q 'job_name: stork' "$PROMTAIL_CONF" || \
+    die "Promtail does not scrape Stork logs"
+grep -q '/var/log/stork/' "$PROMTAIL_CONF" || \
+    die "Promtail Stork job does not target /var/log/stork/"
+grep -q 'node_memory_size_bytes' "$ALERTS_CONF" || \
+    die "alerts.yml HighMemoryUsage does not use FreeBSD-native metric node_memory_size_bytes"
+grep -q 'node_memory_MemTotal_bytes' "$ALERTS_CONF" && \
+    die "alerts.yml still contains Linux-only metric node_memory_MemTotal_bytes"
+
 grep -Eq '^[[:space:]]*allow_sign_up[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$GRAFANA_CONF" || \
     die "Grafana user sign-up is not disabled"
 grep -A2 '^\[auth\.anonymous\]' "$GRAFANA_CONF" | \
@@ -104,6 +115,8 @@ if command -v jq >/dev/null 2>&1; then
                     die "Grafana dashboard missing CPU metrics: $dashboard"
                 grep -q 'Kea exporter' "$dashboard" || \
                     die "Grafana dashboard missing Kea exporter status panel: $dashboard"
+                grep -q 'node_memory_size_bytes' "$dashboard" || \
+                    die "Grafana dashboard missing FreeBSD-native memory metrics: $dashboard"
                 ;;
             *logs*)
                 grep -q 'count_over_time' "$dashboard" || \

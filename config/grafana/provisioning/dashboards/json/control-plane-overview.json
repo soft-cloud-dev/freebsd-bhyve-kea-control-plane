@@ -349,14 +349,19 @@
       },
       "targets": [
         {
-          "expr": "node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes or node_memory_active_bytes or vector(0)",
+          "expr": "node_memory_size_bytes - node_memory_free_bytes - node_memory_inactive_bytes or node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes or vector(0)",
           "legendFormat": "Used Memory",
           "refId": "A"
         },
         {
-          "expr": "node_memory_MemFree_bytes or node_memory_free_bytes or vector(0)",
+          "expr": "node_memory_free_bytes or node_memory_MemFree_bytes or vector(0)",
           "legendFormat": "Free Memory",
           "refId": "B"
+        },
+        {
+          "expr": "node_memory_wired_bytes or vector(0)",
+          "legendFormat": "Wired Memory",
+          "refId": "C"
         }
       ],
       "title": "Memory Usage",
@@ -511,7 +516,7 @@
       },
       "targets": [
         {
-          "expr": "100 - ((node_filesystem_avail_bytes{fstype!=\"tmpfs\"} / node_filesystem_size_bytes{fstype!=\"tmpfs\"}) * 100) or vector(0)",
+          "expr": "100 - ((node_filesystem_avail_bytes{fstype!~\"devfs|fdescfs|procfs|linprocfs|linsysfs|nullfs|tmpfs\"} / node_filesystem_size_bytes{fstype!~\"devfs|fdescfs|procfs|linprocfs|linsysfs|nullfs|tmpfs\"}) * 100) or vector(0)",
           "legendFormat": "{{mountpoint}} used %",
           "refId": "A"
         }

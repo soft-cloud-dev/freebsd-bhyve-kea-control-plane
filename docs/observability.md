@@ -41,7 +41,7 @@ Apply the monitoring role after creating `inventory`:
 sudo -u postgres psql -d inventory -f db/002_monitoring.sql
 ```
 
-The example rc configuration connects through the local PostgreSQL Unix socket. Set a password or certificate-based DSN when local peer authentication is not appropriate. Do not expose PostgreSQL solely to support metrics.
+The example rc configuration connects via TCP loopback (`DATA_SOURCE_NAME`). Set a password or certificate-based DSN when local peer authentication is not appropriate. Do not expose PostgreSQL solely to support metrics.
 
 ## Start order
 
@@ -87,11 +87,26 @@ Expected bindings:
 Grafana provisions Prometheus as its default metrics datasource and Loki as its log datasource. The control plane provides pre-provisioned JSON dashboards:
 
 1. **FreeBSD Control Plane Overview** (`control-plane-overview.json`):
-   - Host load, CPU, memory, filesystem capacity, and extended network signals (throughput RX/TX, packet rates, errors & drops);
-   - PostgreSQL availability, connections, transaction rate, locks, and database size;
-   - Prometheus target health and scrape duration.
+   - Exporter health status cards: Prometheus, FreeBSD Host, PostgreSQL, and Kea;
+   - Host load, CPU utilization, memory usage (with FreeBSD-native metrics including wired memory), and filesystem capacity;
+   - PostgreSQL availability, connections, transaction rate, and database size;
+   - Kea DHCP lease counts and packet rates;
+   - Extended network signals (throughput RX/TX, packet rates, errors & drops);
+   - Prometheus scrape duration and active series count.
 
 2. **Control Plane Logs** (`control-plane-logs.json`):
    - Aggregated log volume and log entry rates over time;
    - Error and warning event rates;
    - Full-text search log stream viewer with interactive filtering.
+
+## Alert rules
+
+Prometheus evaluates `config/alerts.yml` which defines:
+
+- **InstanceDown**: any `up == 0` target unreachable for 1 minute;
+- **PostgresqlDown**: PostgreSQL exporter unreachable for 1 minute;
+- **KeaExporterDown**: Kea exporter unreachable for 1 minute;
+- **HighHostLoad**: 1-minute load average above 5 for 5 minutes;
+- **HighMemoryUsage**: memory usage above 90% for 5 minutes.
+
+All alert expressions use FreeBSD-native `node_exporter` metric names (`node_memory_size_bytes`, `node_memory_free_bytes`) rather than Linux equivalents.

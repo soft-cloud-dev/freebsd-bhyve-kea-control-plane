@@ -44,3 +44,21 @@ scrape_configs:
           job: grafana
           host: freebsd-control-plane
           __path__: /var/log/grafana/*.log
+
+  - job_name: stork
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: stork
+          host: freebsd-control-plane
+          __path__: /var/log/stork/*.log
+
+  - job_name: loki
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: loki
+          host: freebsd-control-plane
+          __path__: /var/log/loki/*.log

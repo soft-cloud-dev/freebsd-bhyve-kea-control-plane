@@ -27,7 +27,7 @@ node_exporter_listen_address="127.0.0.1:9100"
 
 postgres_exporter_enable="YES"
 postgres_exporter_listen_address="127.0.0.1:9187"
-postgres_exporter_env="DATA_SOURCE_URI=postgresql://prometheus@/inventory?host=/tmp&sslmode=disable"
+postgres_exporter_env="DATA_SOURCE_NAME=postgresql://prometheus@127.0.0.1:5432/inventory?sslmode=disable"
 
 grafana_enable="YES"
 grafana_config="/usr/local/etc/grafana/grafana.ini"

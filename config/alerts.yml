@@ -38,7 +38,7 @@ groups:
           description: "Host 1-minute load average is {{ $value }} (greater than 5) for 5 minutes."
 
       - alert: HighMemoryUsage
-        expr: (node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes) / node_memory_MemTotal_bytes * 100 > 90
+        expr: (1 - node_memory_free_bytes / node_memory_size_bytes) * 100 > 90
         for: 5m
         labels:
           severity: warning
