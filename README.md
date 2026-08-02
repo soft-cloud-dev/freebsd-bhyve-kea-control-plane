@@ -1,35 +1,39 @@
 # FreeBSD bhyve + Kea Control Plane
 
-A declarative FreeBSD control plane for ZFS-backed `vm-bhyve` guests and Kea DHCP reservations.
+A declarative V2 control plane for ZFS-backed FreeBSD `vm-bhyve` guests and PostgreSQL-backed Kea DHCP reservations.
 
-`main` is V2-only. The former shell installer and orchestration stack is frozen on [`legacy/v1-shell`](../../tree/legacy/v1-shell) at commit `30068eac6c03ff813ed494739995846b8b8e74be`.
+`main` is V2-only. The former shell stack remains frozen on [`legacy/v1-shell`](../../tree/legacy/v1-shell) for existing installations; new V2 resources do not depend on it.
 
-## Current state
+## Current capabilities
 
-The repository provides a stateful but non-executing `cpctl` foundation:
+`cpctl` provides:
 
-- strict, versioned TOML configuration;
-- deterministic VM normalization and plan generation;
-- stable specification, plan, step-input, and idempotency digests;
-- embedded, checksummed PostgreSQL migrations;
-- separate declared, allocated, observed, and effective state under the `bkcp` schema;
-- durable operation and ordered-step journals;
-- concurrency-safe generation assignment and plan persistence;
-- read-only `doctor`, `status`, and `inspect` commands;
+- strict, versioned site and VM TOML validation;
+- deterministic normalization, plans, step inputs, and idempotency keys;
+- checksummed PostgreSQL migrations;
+- separate declared, allocated, observed, and effective state;
+- durable IP, MAC, dataset, zvol, Kea subnet, and image allocations;
+- persisted ordered execution steps and verified postconditions;
+- typed image, ZFS, cloud-init, Kea, PF, and `vm-bhyve` operations;
+- crash-resumable apply and delete execution;
+- observation-only reconciliation;
+- `doctor`, `plan`, `apply`, `reconcile`, `delete`, `migrate`, `status`, and `inspect`;
 - versioned JSON output and explicit exit codes.
 
-It does **not** yet allocate addresses, download images, create storage, change Kea, change PF, or run `vm-bhyve`. The internal `PrepareApply` operation persists a plan before external execution; no public `apply` command exists yet.
+Plans and concrete allocations are committed before external mutation. A process crash releases the PostgreSQL execution lock; the next invocation resumes at the first step whose postcondition has not been verified.
 
-## Project wiki
+## Host prerequisites
 
-The repository-backed [project wiki](wiki/Home.md) provides the operator and contributor guide:
+V2 currently manages VM lifecycles, not installation of the FreeBSD host itself. Prepare the host with:
 
-- getting started and host prerequisites;
-- architecture and four-state semantics;
-- site and VM configuration reference;
-- PostgreSQL migrations and operation journals;
-- CLI and operational procedures;
-- development, testing, security, and roadmap.
+- hardware virtualization enabled;
+- ZFS and the configured VM dataset;
+- `vm-bhyve` and a configured VM switch/bridge;
+- PostgreSQL for the `bkcp` schema;
+- Kea DHCP4 and an authenticated local Control Agent;
+- PF with a site-owned parent anchor;
+- `makefs`, `unxz`, `dd`, and the commands checked by `cpctl doctor`;
+- privileges sufficient for ZFS, PF, service, and `vm-bhyve` operations.
 
 ## Build and verify
 
@@ -40,63 +44,104 @@ make build
 
 The binary is written to `bin/cpctl`.
 
-## Initialize V2 state
+## Configure and migrate
 
 ```sh
+install -d -m 0750 /usr/local/etc/bkcp
 cp config/site.example.toml /usr/local/etc/bkcp/site.toml
 vi /usr/local/etc/bkcp/site.toml
 
+bin/cpctl doctor --config /usr/local/etc/bkcp/site.toml --offline
+bin/cpctl doctor --config /usr/local/etc/bkcp/site.toml
 bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run --json
 bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml
-bin/cpctl status --config /usr/local/etc/bkcp/site.toml
 ```
 
-Migrations are embedded in the binary, serialized by a PostgreSQL advisory lock, and recorded with SHA-256 checksums. Changing an already applied migration blocks further migration.
+Replace the example all-zero image digest with an independently verified SHA-256 digest before applying a VM. The image driver rejects the sentinel.
 
-## Inspect a deterministic plan
+## Plan and apply a VM
 
 ```sh
-bin/cpctl doctor \
-  --config /usr/local/etc/bkcp/site.toml \
-  --offline
-
 bin/cpctl plan \
   --config /usr/local/etc/bkcp/site.toml \
   --file config/vms/freebsd-node.example.toml \
   --generation 1 \
   --json
+
+bin/cpctl apply \
+  --config /usr/local/etc/bkcp/site.toml \
+  --file config/vms/freebsd-node.example.toml \
+  --json
 ```
 
-The example image digest is an all-zero validation sentinel. Replace it with the independently verified SHA-256 digest before any future image-fetch or apply operation.
+`apply` allocates or reuses durable identities, persists the exact operation, executes typed steps, verifies authoritative postconditions, records observations, and returns success only when effective state is converged.
+
+## Reconcile and inspect
+
+```sh
+bin/cpctl reconcile freebsd-node-01 \
+  --config /usr/local/etc/bkcp/site.toml \
+  --json
+
+bin/cpctl inspect freebsd-node-01 \
+  --config /usr/local/etc/bkcp/site.toml \
+  --json
+```
+
+`inspect` exposes declaration, allocation, latest observation, effective state, operation metadata, exact persisted step input, postcondition evidence, and the resume point.
+
+## Delete
+
+Deletion is deliberately explicit and destructive:
+
+```sh
+bin/cpctl delete freebsd-node-01 \
+  --config /usr/local/etc/bkcp/site.toml \
+  --destroy-storage \
+  --json
+```
+
+The allocation is released and the resource archived only after VM, Kea, PF, seed, and ZFS absence have been verified.
 
 ## Repository layout
 
 ```text
-cmd/cpctl/          CLI entry point
-internal/           Configuration, planning, state, probes, output contracts
-migrations/         Embedded immutable PostgreSQL migrations
-config/             V2 site and VM examples
-schemas/            Versioned JSON schemas
-docs/               Architecture, state, migration, and legacy policy
-wiki/               Operator and contributor documentation
+cmd/cpctl/                 CLI entry point
+internal/allocation/       deterministic durable identity helpers
+internal/execution/        resumable executor and typed FreeBSD adapters
+internal/planner/          pure and allocation-bound execution plans
+internal/state/postgres/   migrations, allocations, journals, evidence
+migrations/                immutable checksummed PostgreSQL migrations
+config/                    V2 site and VM examples
+schemas/                   versioned JSON schemas
+docs/                      architecture, state, and migration contracts
+wiki/                      operator and contributor documentation
 ```
 
 ## Design invariants
 
-- PostgreSQL owns declared, allocated, observed, and effective state as separate contracts.
-- Identical normalized inputs produce identical plans, step digests, and idempotency keys.
-- Identical declarations retain their generation; changed declarations advance it exactly once.
-- Unknown observations remain distinct from confirmed absence.
-- Plans and ordered steps are persisted before external mutation.
-- Kea's PostgreSQL hosts database remains the reservation authority.
-- PF integration must be anchor-scoped and must not replace site policy.
-- Existing V1 allocations must be adopted without changing IP or MAC addresses.
+- PostgreSQL keeps declared, allocated, observed, and effective state separate.
+- Identical normalized and allocated inputs produce identical execution plans and idempotency keys.
+- Unknown or unavailable evidence never becomes confirmed absence.
+- Plans, allocations, and ordered steps are persisted before external mutation.
+- Every completed step stores a verified postcondition and digest.
+- One PostgreSQL session advisory lock serializes execution per resource and disappears on process failure.
+- Kea's hosts database remains the reservation authority.
+- PF changes are restricted to the configured per-resource subanchor.
+- Existing storage is never overwritten unless its persisted image identity matches the allocation.
+- Storage deletion requires the explicit `--destroy-storage` authorization.
 
-See [`docs/streamlined-v2.md`](docs/streamlined-v2.md), [`docs/DESIGN.md`](docs/DESIGN.md), and [`docs/STATE.md`](docs/STATE.md).
+See [`docs/streamlined-v2.md`](docs/streamlined-v2.md), [`docs/DESIGN.md`](docs/DESIGN.md), [`docs/STATE.md`](docs/STATE.md), and the [project wiki](wiki/Home.md).
 
-## Migration and legacy
+## Validation
 
-V1 is no longer developed on `main`. Existing V1 installations should remain pinned to the legacy branch until V2 import and adoption are implemented. Do not recreate V1 scripts in the V2 tree.
+- `V2 CI` runs formatting, vetting, race-enabled unit tests, example validation, and builds.
+- `V2 PostgreSQL` runs migration, allocation, concurrency, and journal integration tests against PostgreSQL 16.
+- `V2 FreeBSD Execution` is a manual, environment-gated self-hosted workflow for real `apply`, `reconcile`, `inspect`, and optional destructive cleanup.
+
+## Legacy
+
+V1 is no longer developed on `main`. Existing V1 installations remain pinned until explicit V2 import and adoption are implemented. New V2-only environments do not create V1 resources.
 
 - [`docs/MIGRATION.md`](docs/MIGRATION.md)
 - [`docs/LEGACY.md`](docs/LEGACY.md)
