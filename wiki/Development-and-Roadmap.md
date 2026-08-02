@@ -7,7 +7,7 @@ make verify
 make build
 ```
 
-`make verify` checks formatting, runs `go vet`, executes race-enabled unit tests, builds `bin/cpctl`, and validates checked-in configuration examples.
+`make verify` checks formatting, runs `go vet`, executes race-enabled unit tests, validates observability assets, builds `bin/cpctl`, and validates checked-in configuration examples.
 
 ## PostgreSQL integration
 
@@ -16,13 +16,14 @@ export BKCP_TEST_DATABASE_URL='postgres://bkcp:bkcp@127.0.0.1:5432/bkcp?sslmode=
 make integration
 ```
 
-Equivalent command:
+Equivalent commands:
 
 ```sh
 go test -race -tags=integration ./internal/state/postgres/...
+go test -race -tags=integration ./internal/metrics/...
 ```
 
-The suite covers:
+The suites cover:
 
 - migration repetition and checksums;
 - declaration generation semantics;
@@ -31,7 +32,9 @@ The suite covers:
 - allocation uniqueness;
 - allocation-bound plan identity;
 - exact executable step persistence;
-- operation and resume-point inspection.
+- operation and resume-point inspection;
+- read-only repeatable metrics snapshots;
+- resource, operation, step, allocation, and observation metric queries.
 
 ## Execution tests
 
@@ -41,7 +44,10 @@ Portable tests use fake repositories and drivers to cover:
 - allocation-bound step and plan digests;
 - resume from the first incomplete step;
 - rejection of tampered persisted input;
-- execution-lock acquisition and release.
+- execution-lock acquisition and release;
+- Prometheus exposition and label escaping;
+- exporter health, readiness, and method restrictions;
+- Grafana dashboard, provisioning, Prometheus rule, and rc.d asset validation.
 
 Real FreeBSD behavior is validated through the manually triggered `V2 FreeBSD Execution` workflow on a protected self-hosted runner labelled `self-hosted`, `freebsd`, and `bkcp`.
 
@@ -58,6 +64,7 @@ Real FreeBSD behavior is validated through the manually triggered `V2 FreeBSD Ex
 - Distinguish unavailable, unknown, present, and absent evidence.
 - Never interpret command failure as confirmed absence.
 - Never overwrite existing storage whose image identity is unknown or different.
+- Keep monitoring database sessions read-only and metrics free of secrets or high-cardinality evidence payloads.
 - Never commit credentials, private keys, tokens, or complete DSNs.
 
 Before merge:
@@ -71,12 +78,12 @@ A lifecycle change additionally requires review of the manual FreeBSD execution 
 
 ## CI
 
-- `V2 CI` runs portable verification.
-- `V2 PostgreSQL` runs PostgreSQL 16 integration tests with the race detector.
+- `V2 CI` runs portable verification and observability asset checks.
+- `V2 PostgreSQL` runs lifecycle and metrics integration tests against PostgreSQL 16 with the race detector.
 - `V2 FreeBSD Execution` runs an explicitly authorized real-host lifecycle test.
 - `Publish GitHub Wiki` synchronizes `wiki/*.md` after the native Wiki is initialized.
 
-## Completed V2 execution milestone
+## Completed V2 execution and observability milestones
 
 - V2-only `main` with frozen `legacy/v1-shell`;
 - strict site and VM configuration;
@@ -90,6 +97,10 @@ A lifecycle change additionally requires review of the manual FreeBSD execution 
 - crash-resumable `apply` and destructive `delete`;
 - journaled observation-only `reconcile`;
 - state, allocation, observation, operation, step, and resume inspection;
+- read-only Prometheus exporter with consistent PostgreSQL snapshots;
+- Prometheus scrape and alert configuration;
+- provisioned Grafana datasource and BKCP dashboard;
+- FreeBSD metrics rc.d service and least-privilege database guidance;
 - guarded FreeBSD self-hosted execution workflow.
 
 ## Next: drift repair policy
@@ -124,14 +135,14 @@ VM lifecycle execution assumes a prepared FreeBSD host. A separate host contract
 - PostgreSQL and Kea service installation;
 - PF parent policy inclusion;
 - privilege delegation for the executor;
-- observability services.
+- optional Prometheus and Grafana package/service installation.
 
 Host bootstrap must remain distinct from per-VM reconciliation and must preserve site-owned policy.
 
 ## Later
 
 - scheduled reconciliation daemon;
-- Prometheus metrics, tracing, and structured logs;
+- tracing and structured logs;
 - Stork and Unbound integrations;
 - explicit image garbage collection;
 - signed release artifacts;

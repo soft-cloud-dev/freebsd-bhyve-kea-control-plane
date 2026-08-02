@@ -48,6 +48,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runStatus(args[1:], stdout, stderr)
 	case "inspect":
 		return runInspect(args[1:], stdout, stderr)
+	case "metrics":
+		return runMetrics(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", args[0])
 		writeUsage(stderr)
@@ -199,5 +201,6 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "  cpctl migrate [--config PATH] [--dry-run] [--json]")
 	fmt.Fprintln(w, "  cpctl status [--config PATH] [--json]")
 	fmt.Fprintln(w, "  cpctl inspect NAME [--config PATH] [--json]")
+	fmt.Fprintln(w, "  cpctl metrics [--config PATH] [--dsn-file PATH] [--listen ADDRESS]")
 	fmt.Fprintln(w, "  cpctl version")
 }

@@ -18,6 +18,7 @@ Default configuration path:
 | `cpctl migrate` | Inspect or apply embedded migrations | PostgreSQL `bkcp` schema only |
 | `cpctl status` | List known resources | None |
 | `cpctl inspect NAME` | Show declaration, allocation, observations, operation evidence, and resume point | None |
+| `cpctl metrics` | Serve Prometheus metrics and health endpoints | PostgreSQL `SELECT` only |
 | `cpctl version` | Print version | None |
 
 ## Initial sequence
@@ -58,7 +59,8 @@ Rules:
 - keep PF changes inside the configured parent and per-resource subanchor;
 - ensure manifest image and pool names exist in the selected site configuration;
 - do not change a resource's pool or image implicitly; explicit replacement is required;
-- do not delete storage without the explicit destructive flag.
+- do not delete storage without the explicit destructive flag;
+- run the metrics exporter with a separate read-only DSN file where possible.
 
 ## Apply
 
@@ -116,6 +118,25 @@ cpctl inspect freebsd-node-01 --config /usr/local/etc/bkcp/site.toml --json
 
 Do not mark steps successful manually. Repair or retry through the declared operation so postconditions remain evidence-backed.
 
+## Metrics
+
+```sh
+cpctl metrics \
+  --config /usr/local/etc/bkcp/site.toml \
+  --dsn-file /usr/local/etc/bkcp/metrics.dsn \
+  --listen 127.0.0.1:9188
+```
+
+`metrics` is a long-running read-only HTTP service. It exports state derived from the PostgreSQL `bkcp` schema and does not invoke lifecycle drivers.
+
+```text
+/metrics      Prometheus exposition
+/-/healthy    process liveness
+/-/ready      PostgreSQL readiness
+```
+
+The default listen address is loopback-only. The optional DSN file should belong to a role with `CONNECT`, schema `USAGE`, and table `SELECT` privileges only. See [Observability](Observability) for Prometheus, Grafana, alerting, and rc.d installation.
+
 ## Delete
 
 Deletion requires explicit storage authorization:
@@ -154,7 +175,7 @@ Repeated migration is a no-op when versions and checksums match. A checksum mism
 }
 ```
 
-Consumers must tolerate backward-compatible field additions while `schema` remains `1`.
+Consumers must tolerate backward-compatible field additions while `schema` remains `1`. The long-running metrics HTTP service uses Prometheus text exposition rather than the command JSON envelope.
 
 ## Exit codes
 
@@ -182,6 +203,7 @@ Consumers must tolerate backward-compatible field additions while `schema` remai
 | Observer unavailable | Restore the authoritative dependency; do not treat it as absence |
 | Driver failure | Re-run the same command; execution resumes at the first unverified step |
 | Resource drift | Inspect authoritative systems and decide whether to re-apply or change intent |
+| Metrics snapshot unavailable | Restore exporter database access; Prometheus scrape returns HTTP 503 |
 | Resource not found | Verify the name and whether the resource was deleted or never prepared |
 
 ## Backup and recovery

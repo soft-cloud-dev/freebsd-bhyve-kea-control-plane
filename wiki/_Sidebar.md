@@ -5,6 +5,7 @@
 - [Bare-Metal Three-Node Bootstrap](Bare-Metal-Three-Node-Bootstrap)
 - [Architecture](Architecture)
 - [CLI and Operations](CLI-and-Operations)
+- [Observability](Observability)
 - [Development and Roadmap](Development-and-Roadmap)
 
 ## Repository contracts

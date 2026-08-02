@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: BKCP
+    orgId: 1
+    folder: BKCP
+    folderUid: bkcp
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/db/grafana/dashboards/bkcp
+      foldersFromFilesStructure: false
