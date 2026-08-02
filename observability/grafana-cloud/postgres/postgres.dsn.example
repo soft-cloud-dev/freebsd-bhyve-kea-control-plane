@@ -1,0 +1,1 @@
+postgresql://db-o11y:REPLACE_WITH_SECRET@127.0.0.1:5432/controlplane?sslmode=require

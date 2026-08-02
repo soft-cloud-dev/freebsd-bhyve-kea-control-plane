@@ -127,6 +127,23 @@ service grafana restart
 
 The provisioned datasource UID is `bkcp-prometheus`; its default URL is `http://127.0.0.1:9090`. Adjust the provisioning file when Prometheus runs elsewhere.
 
+## Grafana Cloud PostgreSQL Database Observability
+
+An optional Grafana Alloy pipeline adds query-level PostgreSQL observability while forwarding the existing BKCP metrics to Grafana Cloud:
+
+```text
+observability/grafana-cloud/postgres/config.alloy
+observability/grafana-cloud/postgres/postgresql.conf.example
+observability/grafana-cloud/postgres/grants.sql
+observability/grafana-cloud/postgres/alloy.env.example
+observability/grafana-cloud/postgres/postgres.dsn.example
+config/rc.d/bkcp_alloy
+```
+
+It requires PostgreSQL 14 or later, `pg_stat_statements`, Alloy 1.17 or later, a separate `db-o11y` identity, and Grafana Cloud metrics/logs write credentials. Query sample redaction remains enabled, PostgreSQL log ingestion is disabled by default, and Alloy connects directly to PostgreSQL rather than through PgBouncer.
+
+See [`grafana-cloud/postgres/README.md`](grafana-cloud/postgres/README.md) for database settings, grants, FreeBSD service installation, verification, security boundaries, and rollback.
+
 ## Dashboard coverage
 
 The `BKCP Control Plane` dashboard includes:

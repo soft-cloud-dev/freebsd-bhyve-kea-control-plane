@@ -98,6 +98,45 @@ The `BKCP Control Plane` dashboard shows:
 
 Provisioned dashboards are repository-owned. Do not treat UI edits as canonical.
 
+## Grafana Cloud PostgreSQL Database Observability
+
+The optional cloud path adds query-level PostgreSQL telemetry through Grafana Alloy while preserving the local dashboard:
+
+```text
+PostgreSQL 14+
+   | direct connection as db-o11y
+   v
+Grafana Alloy 1.17+
+   |-- database metrics ----------> Grafana Cloud Metrics
+   |-- query/schema/plan records -> Grafana Cloud Logs
+   `-- cpctl metrics :9188 -------> Grafana Cloud Metrics
+```
+
+Repository assets:
+
+```text
+observability/grafana-cloud/postgres/config.alloy
+observability/grafana-cloud/postgres/postgresql.conf.example
+observability/grafana-cloud/postgres/grants.sql
+observability/grafana-cloud/postgres/alloy.env.example
+observability/grafana-cloud/postgres/postgres.dsn.example
+config/rc.d/bkcp_alloy
+```
+
+Required controls:
+
+- enable `pg_stat_statements`, query IDs, full statement tracking, and a 4096-byte activity query buffer;
+- use a separate `db-o11y` role with monitoring and explicitly scoped object-read privileges;
+- connect Alloy directly to PostgreSQL, not through PgBouncer or a load balancer;
+- keep query sample redaction enabled;
+- keep Alloy's HTTP interface on loopback;
+- use a Grafana Cloud access policy token limited to `metrics:write` and `logs:write`;
+- assess cloud data residency and retention before enabling query telemetry.
+
+PostgreSQL log-file ingestion is deliberately disabled until the site selects an explicit file or syslog source. Query details, redacted samples, schema details, explain plans, server metrics, and BKCP metrics are enabled.
+
+The full procedure is in [`observability/grafana-cloud/postgres/README.md`](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/observability/grafana-cloud/postgres/README.md). It follows Grafana's [self-managed PostgreSQL setup](https://grafana.com/docs/grafana-cloud/observe-and-act/monitor-applications/database-observability/set-up/postgres/).
+
 ## Metric families
 
 ```text
@@ -118,4 +157,4 @@ bkcp_exporter_scrape_duration_seconds
 
 The exporter omits credentials, DSNs, IP addresses, MAC addresses, specification bodies, persisted step inputs, and error details.
 
-Full installation commands and the read-only role example are in [`observability/README.md`](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/observability/README.md).
+Full local installation commands and the read-only role example are in [`observability/README.md`](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/observability/README.md).

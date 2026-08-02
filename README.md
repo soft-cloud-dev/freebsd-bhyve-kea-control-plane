@@ -18,6 +18,7 @@ A declarative V2 control plane for ZFS-backed FreeBSD `vm-bhyve` guests and Post
 - crash-resumable apply and delete execution;
 - observation-only reconciliation;
 - read-only Prometheus metrics and provisioned Grafana assets;
+- optional Grafana Cloud PostgreSQL Database Observability through Alloy;
 - `doctor`, `plan`, `apply`, `reconcile`, `delete`, `migrate`, `status`, `inspect`, and `metrics`;
 - versioned JSON output and explicit exit codes.
 
@@ -36,7 +37,7 @@ V2 currently manages VM lifecycles, not installation of the FreeBSD host itself.
 - `makefs`, `unxz`, `dd`, and the commands checked by `cpctl doctor`;
 - privileges sufficient for ZFS, PF, service, and `vm-bhyve` operations.
 
-Prometheus and Grafana are optional read-only add-ons and are not required for lifecycle correctness.
+Prometheus, Grafana, Alloy, and Grafana Cloud are optional read-only add-ons and are not required for lifecycle correctness.
 
 ## Build and verify
 
@@ -131,9 +132,11 @@ The repository includes:
 - Prometheus scrape configuration and alert rules;
 - a provisioned Grafana Prometheus datasource;
 - the provisioned `BKCP Control Plane` dashboard;
-- a least-privilege installation guide.
+- a least-privilege installation guide;
+- an optional Grafana Alloy pipeline for Grafana Cloud PostgreSQL Database Observability;
+- a separate `db-o11y` role contract, PostgreSQL settings, FreeBSD Alloy service, and cloud validation guide.
 
-See [`observability/README.md`](observability/README.md) and the [Observability wiki guide](wiki/Observability.md).
+See [`observability/README.md`](observability/README.md), [`observability/grafana-cloud/postgres/README.md`](observability/grafana-cloud/postgres/README.md), and the [Observability wiki guide](wiki/Observability.md).
 
 ## Repository layout
 
@@ -146,7 +149,7 @@ internal/planner/          pure and allocation-bound execution plans
 internal/state/postgres/   migrations, allocations, journals, evidence
 migrations/                immutable checksummed PostgreSQL migrations
 config/                    V2 site, VM, and rc.d examples
-observability/             Prometheus rules and Grafana provisioning
+observability/             local and Grafana Cloud monitoring assets
 schemas/                   versioned JSON schemas
 docs/                      architecture, state, and migration contracts
 wiki/                      operator and contributor documentation
@@ -165,12 +168,13 @@ wiki/                      operator and contributor documentation
 - Existing storage is never overwritten unless its persisted image identity matches the allocation.
 - Storage deletion requires the explicit `--destroy-storage` authorization.
 - Monitoring is read-only and does not invoke lifecycle drivers.
+- Cloud telemetry is opt-in, separately credentialed, redacted by default, and removable without affecting lifecycle operation.
 
 See [`docs/streamlined-v2.md`](docs/streamlined-v2.md), [`docs/DESIGN.md`](docs/DESIGN.md), [`docs/STATE.md`](docs/STATE.md), and the [project wiki](wiki/Home.md).
 
 ## Validation
 
-- `V2 CI` runs formatting, vetting, race-enabled unit tests, observability asset checks, example validation, and builds.
+- `V2 CI` runs formatting, vetting, race-enabled unit tests, observability asset checks, example validation, builds, and Alloy 1.18 configuration validation.
 - `V2 PostgreSQL` runs lifecycle and metrics snapshot integration tests against PostgreSQL 16.
 - `V2 FreeBSD Execution` is a manual, environment-gated self-hosted workflow for real `apply`, `reconcile`, `inspect`, and optional destructive cleanup.
 
