@@ -38,7 +38,7 @@ node count             3
 cloud-init profile     config/cloud-init/freebsd-jail-node.yaml
 boot timeout           600 seconds per node
 inventory              /var/db/freebsd-bhyve-kea-control-plane/clusters/freebsd-node.tsv
-kubeconfig source      root@ipa.softcloud.dev:/etc/kubernetes/admin.conf
+kubeconfig source      fedora@ipa.softcloud.dev:/etc/kubernetes/admin.conf via sudo -n cat
 kubeconfig destination /root/.kube/config
 control-plane hosts    /var/db/freebsd-bhyve-kea-control-plane/clusters/kubernetes-control-plane.known_hosts
 ```
@@ -49,8 +49,9 @@ Before creating a VM, `cluster-up` runs `bootstrap-kubectl`. The bootstrap targe
 2. uses `KUBECONFIG_SOURCE` when a readable local file is supplied;
 3. otherwise reuses an existing destination unless `KUBECONFIG_REFRESH=yes`;
 4. otherwise fetches the remote kubeconfig over batch-mode SSH;
-5. installs it atomically with mode `0600`;
-6. verifies the context and API with `kubectl cluster-info`.
+5. validates the fetched file before replacing an existing configuration;
+6. installs it atomically with mode `0600`;
+7. verifies the installed context and API with `kubectl cluster-info`.
 
 Bootstrap or refresh access without provisioning guests:
 
@@ -69,18 +70,12 @@ Override the Kubernetes control plane when needed:
 sudo make bootstrap-kubectl \
   KUBECONFIG_REMOTE_HOST=control-plane.example.net \
   KUBECONFIG_REMOTE_USER=root \
+  KUBECONFIG_REMOTE_SUDO=no \
   KUBECONFIG_REMOTE_PATH=/etc/kubernetes/admin.conf \
   KUBECONFIG_REMOTE_SSH_KEY=/root/.ssh/control-plane_ed25519
 ```
 
-For a non-root remote account that has passwordless sudo permission to read the file:
-
-```sh
-sudo make bootstrap-kubectl \
-  KUBECONFIG_REMOTE_USER=admin \
-  KUBECONFIG_REMOTE_SUDO=yes \
-  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519
-```
+The default `fedora` account must have passwordless sudo permission to read `/etc/kubernetes/admin.conf`. Alternatively, override the remote user and sudo mode.
 
 SSH uses `StrictHostKeyChecking=accept-new` with a dedicated known-hosts file. A changed control-plane host key is rejected; review and remove the stale entry deliberately rather than disabling host-key verification.
 
