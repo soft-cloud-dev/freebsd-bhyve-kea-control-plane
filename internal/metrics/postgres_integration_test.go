@@ -105,6 +105,9 @@ VALUES ($1, 1, 'zfs', 'ensure-storage', $2, 'succeeded', 1)`, operationUUID, dig
 		t.Fatal(err)
 	}
 	defer source.Close()
+	if _, err := source.pool.Exec(ctx, `CREATE TEMP TABLE exporter_must_be_read_only(id integer)`); err == nil {
+		t.Fatal("metrics PostgreSQL session accepted a write")
+	}
 	snapshot, err := source.Snapshot(ctx)
 	if err != nil {
 		t.Fatal(err)
