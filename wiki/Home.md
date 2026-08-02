@@ -1,22 +1,24 @@
 # FreeBSD bhyve + Kea Control Plane
 
-`cpctl` is the V2 control plane for describing FreeBSD `vm-bhyve` guests, validating host dependencies, producing deterministic plans, and storing durable PostgreSQL state.
+`cpctl` is the V2 control plane for FreeBSD `vm-bhyve` guests, ZFS-backed storage, Kea reservations, and durable PostgreSQL state.
 
-## Current status
+V2 is currently **stateful but non-executing**.
 
-| Available now | Not available yet |
-|---|---|
-| Strict TOML configuration | IP and MAC allocation |
-| Offline and live dependency checks | Image download and promotion |
-| Deterministic VM plans and digests | Cloud-init media creation |
-| Embedded PostgreSQL migrations | Kea, ZFS, PF, or `vm-bhyve` mutation |
-| Declared, allocated, observed, and effective state | Public `apply`, `delete`, `adopt`, or `import-v1` commands |
-| Durable operation and step journals | Continuous reconciliation |
-| Read-only `status` and `inspect` | |
+## Available now
 
-A persisted operation is an execution contract. It is not evidence that infrastructure changed.
+- strict site and VM TOML validation;
+- offline and live dependency checks;
+- deterministic plans, step digests, and idempotency keys;
+- checksummed PostgreSQL migrations;
+- separate declared, allocated, observed, and effective state;
+- durable operation and ordered-step journals;
+- `doctor`, `plan`, `migrate`, `status`, and `inspect`.
 
-## Operator path
+Not yet implemented: address allocation, image promotion, cloud-init generation, Kea/ZFS/PF/`vm-bhyve` mutation, `apply`, `delete`, import, adoption, and reconciliation.
+
+A persisted plan is an execution contract. It is not evidence that infrastructure changed.
+
+## Quick path
 
 ```sh
 make verify
@@ -30,26 +32,28 @@ bin/cpctl status --config /usr/local/etc/bkcp/site.toml
 bin/cpctl plan --config /usr/local/etc/bkcp/site.toml --file ./vm.toml --generation 1 --json
 ```
 
-Stop at `plan`. V2 does not execute infrastructure changes yet.
+Stop at `plan`.
 
-## Wiki map
+## Documentation
 
-- [Getting Started](Getting-Started.md) — build, configure, migrate, and plan.
-- [Architecture](Architecture.md) — system boundaries, state model, and safety rules.
-- [CLI and Operations](CLI-and-Operations.md) — commands, configuration reference, migrations, troubleshooting, and backups.
-- [Development and Testing](Development-and-Testing.md) — local workflow, CI, migration rules, and contribution checks.
-- [Roadmap](Roadmap.md) — sequence from durable allocation to resumable execution.
+1. [Getting Started](Getting-Started)
+2. [Architecture](Architecture)
+3. [CLI and Operations](CLI-and-Operations)
+4. [Development and Roadmap](Development-and-Roadmap)
 
-## Non-negotiable rules
+## Fixed rules
 
-1. Persist plans and ordered steps before external mutation.
-2. Keep declared, allocated, observed, and effective state separate.
-3. Treat unavailable evidence as unknown, never as confirmed absence.
-4. Keep PF changes inside the configured anchor.
-5. Preserve existing V1 identities during future adoption.
+- Persist plans and ordered steps before external mutation.
+- Keep declared, allocated, observed, and effective state separate.
+- Never convert unavailable evidence into confirmed absence.
+- Restrict PF ownership to the configured anchor.
+- Preserve V1 identities during future adoption.
 
-## V1 boundary
+## Authoritative repository documents
 
-The former shell implementation is frozen on `legacy/v1-shell`. V2 does not write legacy `public` schema objects and does not manage a V1 resource until explicit import and adoption succeed.
+- [Canonical architecture](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/streamlined-v2.md)
+- [Implementation contract](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/DESIGN.md)
+- [State contract](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/STATE.md)
+- [Migration policy](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/MIGRATION.md)
 
-The repository remains authoritative. See `docs/DESIGN.md`, `docs/STATE.md`, `docs/MIGRATION.md`, and `docs/streamlined-v2.md`.
+V1 is frozen on `legacy/v1-shell`. No V1 resource is managed by V2 until explicit import and adoption succeed.
