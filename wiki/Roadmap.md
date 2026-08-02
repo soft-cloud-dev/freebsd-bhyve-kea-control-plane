@@ -1,113 +1,85 @@
 # Roadmap
 
-The roadmap preserves the rule that plans and journals must exist before any external mutation.
+V2 advances only when each layer has deterministic inputs, durable state, idempotent behavior, and verified postconditions.
 
-## Completed foundation
+## Completed
 
-- V2-only `main` branch and frozen `legacy/v1-shell` branch.
-- Strict versioned site and VM configuration.
+- V2-only `main` and frozen `legacy/v1-shell`.
+- Strict site and VM configuration.
 - Deterministic normalization, plans, step digests, and idempotency keys.
-- FreeBSD dependency doctor probes.
+- FreeBSD dependency probes.
 - Embedded checksummed PostgreSQL migrations.
 - Dedicated `bkcp` four-state schema.
-- Transactional generation assignment and operation preparation.
-- Read-only status and inspection commands.
-- PostgreSQL 16 race-enabled integration CI.
+- Concurrency-safe generation assignment and operation preparation.
+- Read-only `status` and `inspect`.
+- PostgreSQL 16 race-enabled CI.
 
-## Next: allocation contracts
+## 1. Durable allocations
 
-Implement durable allocation without external execution:
+Implement concurrency-safe allocation for:
 
-- deterministic IP selection from configured pools;
-- locally administered MAC generation;
-- dataset and zvol naming;
-- image digest binding;
-- allocation uniqueness and release rules;
-- concurrency and exhaustion tests.
+- IP addresses;
+- locally administered MAC addresses;
+- dataset and zvol names;
+- image digest bindings.
 
-Allocated values must survive restarts and repeated planning.
+Assignments must survive retries, restarts, and repeated planning.
 
-## Next: observation collectors
+## 2. Read-only observations
 
-Add read-only collectors for:
+Collect typed evidence from:
 
-- `vm-bhyve` inventory and power state;
-- ZFS datasets and zvols;
-- Kea reservations;
+- `vm-bhyve`;
+- ZFS;
+- Kea;
 - cloud-init seed artifacts;
 - PF anchor state.
 
-Collectors must represent unavailable, unknown, present, and absent distinctly.
+Unavailable, unknown, present, and absent must remain distinct.
 
-## Next: typed drivers
+## 3. Typed drivers
 
-Implement idempotent drivers with explicit postconditions:
+Add independently retryable drivers for:
 
-- image cache;
+- image cache and verification;
 - ZFS storage;
+- VM configuration and lifecycle;
 - cloud-init seed generation;
-- Kea reservation management;
-- `vm-bhyve` definition and lifecycle;
+- Kea reservations;
 - PF anchor rules.
 
-Each driver action must be independently retryable.
+Every action requires explicit preconditions and postconditions.
 
-## Next: resumable `apply`
-
-Expose public execution only after driver contracts exist.
-
-Expected flow:
+## 4. Resumable `apply`
 
 ```text
-load and validate manifest
-prepare or reuse persisted operation
-collect current observations
+prepare or reuse operation
+collect observations
 execute first incomplete step
 verify postcondition
-persist step success
+persist success
 repeat
 collect final observations
 derive effective state
 ```
 
-Crashes must resume from the first unverified postcondition, not restart blindly.
+A crash resumes from the first unverified postcondition.
 
-## Next: delete
+## 5. Delete, import, and adoption
 
-Deletion must be a separate deterministic operation with ordered safety checks, reservation release, storage policy, and confirmed absence. Destructive storage behavior must be explicit rather than inferred.
+Deletion must be deterministic and explicit about destructive storage policy.
 
-## Next: V1 import and adoption
+V1 import is read-only. Adoption must preserve guest name, IP, MAC, storage identity, and Kea reservation identity. Nothing becomes V2-managed implicitly.
 
-Import reads V1 state without modifying it. Adoption must preserve:
+## Later
 
-- IP address;
-- MAC address;
-- storage identity;
-- guest name;
-- Kea reservation identity.
-
-No existing resource becomes V2-managed without explicit approval and verification.
-
-## Later capabilities
-
-- scheduled reconciliation daemon;
-- drift reports and repair plans;
-- Stork integration;
+- scheduled reconciliation and drift repair;
 - Prometheus metrics and structured logs;
-- Unbound DNS updates;
-- FreeBSD package and service installation;
-- release packaging and signed artifacts;
+- Stork and Unbound integration;
+- FreeBSD package and service bootstrap;
+- signed release artifacts;
 - dedicated FreeBSD bare-metal CI.
 
-## Definition of executable V2
+## Executable V2 definition
 
-The control plane becomes operationally executable when:
-
-- allocations are durable and concurrency-safe;
-- every external driver is idempotent;
-- every step has a verified postcondition;
-- interrupted operations resume safely;
-- unknown observations never become absence;
-- apply and delete pass PostgreSQL and FreeBSD integration tests;
-- V1 adoption preserves existing identities;
-- operator documentation matches the shipped command surface.
+V2 is operationally executable only when allocations are durable, all drivers are idempotent, every step verifies a postcondition, interrupted work resumes safely, unknown evidence never becomes absence, and apply/delete pass PostgreSQL and FreeBSD integration tests.
