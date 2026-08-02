@@ -1,0 +1,58 @@
+name: Normalize Observability Branch
+
+on:
+  push:
+    branches: [feat/prometheus-grafana]
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prometheus-grafana
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Normalize dashboard and command usage
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          dashboard_path = Path('observability/grafana/dashboards/bkcp-overview.json')
+          dashboard = json.loads(dashboard_path.read_text())
+          found = False
+          for panel in dashboard.get('panels', []):
+              if panel.get('id') != 4:
+                  continue
+              for target in panel.get('targets', []):
+                  target['expr'] = 'up{job="bkcp"}'
+              panel['title'] = 'Prometheus Target'
+              found = True
+          if not found:
+              raise SystemExit('dashboard exporter panel not found')
+          dashboard_path.write_text(json.dumps(dashboard, indent=2) + '\n')
+
+          cli_path = Path('internal/cli/cli.go')
+          cli = cli_path.read_text()
+          old = '  cpctl metrics [--config PATH] [--listen ADDRESS]'
+          new = '  cpctl metrics [--config PATH] [--dsn-file PATH] [--listen ADDRESS]'
+          if old not in cli:
+              raise SystemExit('metrics usage line not found')
+          cli_path.write_text(cli.replace(old, new, 1))
+          PY
+          gofmt -w internal/cli/cli.go internal/cli/metrics.go internal/metrics
+      - name: Commit normalized assets
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/cli/cli.go internal/cli/metrics.go internal/metrics observability/grafana/dashboards/bkcp-overview.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(observability): normalize exporter assets'
+          git push origin HEAD:feat/prometheus-grafana
