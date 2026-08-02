@@ -12,6 +12,7 @@ import (
 
 type Repository interface {
 	InspectResource(context.Context, string) (state.Inspection, error)
+	LockExecution(context.Context, string) (func(), error)
 	StartOperation(context.Context, string) error
 	ClaimStep(context.Context, string, int) (state.OperationStep, error)
 	CompleteStep(context.Context, string, int, any, bool) error
@@ -38,6 +39,16 @@ type Executor struct {
 
 func (e Executor) Run(ctx context.Context, resourceName string) (state.Inspection, error) {
 	inspection, err := e.Repository.InspectResource(ctx, resourceName)
+	if err != nil {
+		return state.Inspection{}, err
+	}
+	unlock, err := e.Repository.LockExecution(ctx, inspection.Resource.UUID)
+	if err != nil {
+		return state.Inspection{}, err
+	}
+	defer unlock()
+
+	inspection, err = e.Repository.InspectResource(ctx, resourceName)
 	if err != nil {
 		return state.Inspection{}, err
 	}
