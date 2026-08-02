@@ -42,8 +42,9 @@ jobs:
         run: |
           ruby -e '
             require "yaml"
+            require "date"
             Dir.glob("{config,.github}/**/*.{yml,yaml}").sort.each do |path|
-              YAML.safe_load(File.read(path), aliases: true)
+              YAML.safe_load(File.read(path), permitted_classes: [Date], aliases: true)
               puts "OK #{path}"
             end
           '
