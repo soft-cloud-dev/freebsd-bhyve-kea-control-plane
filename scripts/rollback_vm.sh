@@ -59,8 +59,27 @@ delete_result=$(printf '%s' "$delete_response" | jq -er '.[0].result')
 if [ "$delete_result" -eq 3 ]; then
     echo "[!] Kea host for ${VM_NAME} is already absent; continuing rollback" >&2
 elif [ "$delete_result" -ne 0 ]; then
-    echo "ERROR: Kea host-del failed during rollback: $delete_response" >&2
-    exit 1
+    echo "WARNING: Kea host-del failed during rollback: $delete_response" >&2
+    echo "WARNING: Attempting fallback to reservation-del..." >&2
+    fallback_payload=$(jq -n \
+        --arg mac "$MAC_ADDRESS" \
+        --argjson subnet_id "$KEA_SUBNET_ID" \
+        '{
+            command:"reservation-del",
+            arguments:{
+                "subnet-id":$subnet_id,
+                "identifier-type":"hw-address",
+                identifier:$mac
+            }
+        }')
+    fallback_response=$(kea_request "$fallback_payload")
+    fallback_result=$(printf '%s' "$fallback_response" | jq -er '.[0].result')
+    if [ "$fallback_result" -eq 3 ]; then
+        echo "[!] Kea reservation for ${VM_NAME} is already absent; continuing rollback" >&2
+    elif [ "$fallback_result" -ne 0 ]; then
+        echo "WARNING: Kea reservation-del also failed: $fallback_response" >&2
+        echo "WARNING: Continuing rollback despite Kea errors." >&2
+    fi
 fi
 
 if vm info "$VM_NAME" >/dev/null 2>&1; then

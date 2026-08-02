@@ -179,7 +179,22 @@ rollback() {
                         "hw-address":$mac
                     }
                 }')
-            kea_request "$delete_payload" >/dev/null 2>&1 || true
+            delete_response=$(kea_request "$delete_payload" 2>/dev/null || true)
+            delete_result=$(printf '%s' "$delete_response" | jq -er '.[0].result' 2>/dev/null || echo "1")
+            if [ "$delete_result" -ne 0 ] && [ "$delete_result" -ne 3 ]; then
+                fallback_payload=$(jq -n \
+                    --arg mac "$MAC_ADDRESS" \
+                    --argjson subnet_id "$KEA_SUBNET_ID" \
+                    '{
+                        command:"reservation-del",
+                        arguments:{
+                            "subnet-id":$subnet_id,
+                            "identifier-type":"hw-address",
+                            identifier:$mac
+                        }
+                    }')
+                kea_request "$fallback_payload" >/dev/null 2>&1 || true
+            fi
         fi
 
         if [ "$inserted_vm" -eq 1 ]; then
