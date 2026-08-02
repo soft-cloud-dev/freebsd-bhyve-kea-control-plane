@@ -182,6 +182,16 @@ rollback() {
                 }')
             kea_request "$delete_payload" >/dev/null 2>&1 || true
 
+            lease_payload=$(jq -n \
+                --arg ip "$IP_ADDRESS" \
+                '{
+                    command:"lease4-del",
+                    arguments:{
+                        "ip-address":$ip
+                    }
+                }')
+            kea_request "$lease_payload" >/dev/null 2>&1 || true
+
             if [ -w "/usr/local/etc/kea/kea-dhcp4.conf" ] || [ -f "/usr/local/etc/kea/kea-dhcp4.conf" ]; then
                 tmp_conf=$(mktemp)
                 jq --arg mac "$MAC_ADDRESS" \

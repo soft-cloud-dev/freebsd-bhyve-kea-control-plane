@@ -123,7 +123,7 @@ kea_existing=""
 if [ -r /usr/local/etc/kea/kea-dhcp4.conf ]; then
     kea_existing=/usr/local/etc/kea/kea-dhcp4.conf
 fi
-for kea_hook in libdhcp_host_cmds.so libdhcp_pgsql.so libdhcp_subnet_cmds.so; do
+for kea_hook in libdhcp_host_cmds.so libdhcp_lease_cmds.so libdhcp_pgsql.so libdhcp_subnet_cmds.so; do
     [ -r "/usr/local/lib/kea/hooks/${kea_hook}" ] || \
         die "Kea hook ${kea_hook} is unavailable; rebuild net/kea 3.0+ with OPTIONS_SET=PGSQL"
 done

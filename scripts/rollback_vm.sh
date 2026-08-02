@@ -64,6 +64,22 @@ EOF
         exit 1
     fi
 
+    lease_payload=$(jq -n \
+        --arg ip "$IP_ADDRESS" \
+        '{
+            command:"lease4-del",
+            arguments:{
+                "ip-address":$ip
+            }
+        }')
+    lease_response=$(kea_request "$lease_payload")
+    lease_result=$(printf '%s' "$lease_response" | jq -er '.[0].result')
+    if [ "$lease_result" -eq 3 ]; then
+        echo "[!] Kea lease for ${IP_ADDRESS} is already absent" >&2
+    elif [ "$lease_result" -ne 0 ]; then
+        echo "WARNING: Kea lease4-del failed during rollback: $lease_response" >&2
+    fi
+
     if [ -w "/usr/local/etc/kea/kea-dhcp4.conf" ] || [ -f "/usr/local/etc/kea/kea-dhcp4.conf" ]; then
         tmp_conf=$(mktemp)
         jq --arg mac "$MAC_ADDRESS" \
