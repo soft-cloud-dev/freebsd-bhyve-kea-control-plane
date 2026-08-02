@@ -43,6 +43,12 @@ func runApply(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return executionFailure(stdout, stderr, *jsonOutput, "apply", err)
 	}
+	if prepared.Operation.Status == "succeeded" {
+		prepared, err = repo.PrepareExecutableReconcile(ctx, site, prepared.Resource.Name)
+		if err != nil {
+			return executionFailure(stdout, stderr, *jsonOutput, "apply", err)
+		}
+	}
 	runner := execution.Executor{Repository: repo, Driver: execution.NewSystemDriver()}
 	inspection, err := runner.Run(ctx, prepared.Resource.Name)
 	if err != nil {
