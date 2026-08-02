@@ -2,6 +2,7 @@
 
 - [Home](Home)
 - [Getting Started](Getting-Started)
+- [Bare-Metal Three-Node Bootstrap](Bare-Metal-Three-Node-Bootstrap)
 - [Architecture](Architecture)
 - [CLI and Operations](CLI-and-Operations)
 - [Development and Roadmap](Development-and-Roadmap)
