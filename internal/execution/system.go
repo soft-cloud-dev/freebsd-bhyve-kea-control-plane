@@ -414,7 +414,11 @@ func (d *SystemDriver) observe(ctx context.Context, input planner.StepInput, exp
 	if vmErr != nil {
 		power = "unavailable"
 	} else if vmExists {
-		if running { power = "running" } else { power = "stopped" }
+		if running {
+			power = "running"
+		} else {
+			power = "stopped"
+		}
 	}
 	observation := &state.Observation{ObserverVersion: "cpctl-v2", VMState: vmState, StorageState: storageState, KeaState: keaState, SeedState: seedState, PowerState: power, Observed: map[string]any{"vm": input.Resource, "ip": input.Allocation.IPAddress, "mac": input.Allocation.MACAddress, "kea": keaResponse}}
 	if expectAbsent {
@@ -460,13 +464,21 @@ func (d *SystemDriver) keaReservation(ctx context.Context, input planner.StepInp
 
 func (d *SystemDriver) keaRequest(ctx context.Context, input planner.StepInput, command string, arguments any) (any, error) {
 	username, err := readSecret(input.Kea.UsernameFile)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	password, err := readSecret(input.Kea.PasswordFile)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	payload, err := json.Marshal(map[string]any{"command": command, "arguments": arguments})
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, input.Kea.APIURL, bytes.NewReader(payload))
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	request.Header.Set("Content-Type", "application/json")
 	request.SetBasicAuth(username, password)
 	client := d.Client
@@ -476,10 +488,14 @@ func (d *SystemDriver) keaRequest(ctx context.Context, input planner.StepInput, 
 		client = &copy
 	}
 	response, err := client.Do(request)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, fmt.Errorf("Kea HTTP status %d", response.StatusCode)
 	}
@@ -496,30 +512,48 @@ func (d *SystemDriver) keaRequest(ctx context.Context, input planner.StepInput, 
 
 func (d *SystemDriver) download(ctx context.Context, url, destination string) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	response, err := d.Client.Do(request)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 { return fmt.Errorf("image download HTTP status %d", response.StatusCode) }
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("image download HTTP status %d", response.StatusCode)
+	}
 	file, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	_, copyErr := io.Copy(file, response.Body)
 	closeErr := file.Close()
-	if copyErr != nil { return copyErr }
+	if copyErr != nil {
+		return copyErr
+	}
 	return closeErr
 }
 
 func presence(exists bool, err error) string {
-	if exists { return "present" }
-	if err != nil && !errors.Is(err, os.ErrNotExist) { return "unavailable" }
+	if exists {
+		return "present"
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "unavailable"
+	}
 	return "absent"
 }
 
 func readSecret(path string) (string, error) {
 	contents, err := os.ReadFile(path)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	value := strings.TrimSpace(string(contents))
-	if value == "" { return "", fmt.Errorf("credential file is empty: %s", path) }
+	if value == "" {
+		return "", fmt.Errorf("credential file is empty: %s", path)
+	}
 	return value, nil
 }
 
@@ -527,52 +561,80 @@ func yamlQuote(value string) string { return strings.ReplaceAll(value, "'", "''"
 
 func commandToFile(ctx context.Context, destination, name string, args ...string) error {
 	file, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	command := exec.CommandContext(ctx, name, args...)
 	command.Stdout = file
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
 	runErr := command.Run()
 	closeErr := file.Close()
-	if runErr != nil { return fmt.Errorf("%s: %w: %s", name, runErr, strings.TrimSpace(stderr.String())) }
+	if runErr != nil {
+		return fmt.Errorf("%s: %w: %s", name, runErr, strings.TrimSpace(stderr.String()))
+	}
 	return closeErr
 }
 
 func fileSHA256(path string) (string, error) {
 	file, err := os.Open(path)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer file.Close()
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil { return "", err }
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func copyFile(source, destination string, mode os.FileMode) error {
 	input, err := os.Open(source)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer input.Close()
 	output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	_, copyErr := io.Copy(output, input)
 	closeErr := output.Close()
-	if copyErr != nil { return copyErr }
+	if copyErr != nil {
+		return copyErr
+	}
 	return closeErr
 }
 
 func writeAtomic(path string, contents []byte, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil { return err }
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
 	temp, err := os.CreateTemp(filepath.Dir(path), ".bkcp-")
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	name := temp.Name()
 	defer os.Remove(name)
-	if err := temp.Chmod(mode); err != nil { temp.Close(); return err }
-	if _, err := temp.Write(contents); err != nil { temp.Close(); return err }
-	if err := temp.Close(); err != nil { return err }
+	if err := temp.Chmod(mode); err != nil {
+		temp.Close()
+		return err
+	}
+	if _, err := temp.Write(contents); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
 	return os.Rename(name, path)
 }
 
 func writeJSONAtomic(path string, value any, mode os.FileMode) error {
 	contents, err := json.Marshal(value)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return writeAtomic(path, append(contents, '\n'), mode)
 }

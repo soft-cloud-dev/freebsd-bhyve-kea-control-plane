@@ -188,11 +188,11 @@ func TestExecutableAllocationAndInputs(t *testing.T) {
 	defer repo.Close()
 	site := config.Site{
 		Schema: 1, ControlPlaneID: "lab-01",
-		Host: config.Host{VMBridge: "public", VMDataset: "zroot/vm", VMRoot: "/zroot/vm"},
-		Kea: config.Kea{APIURL: "http://127.0.0.1:8000/", UsernameFile: "/kea/user", PasswordFile: "/kea/pass"},
+		Host:    config.Host{VMBridge: "public", VMDataset: "zroot/vm", VMRoot: "/zroot/vm"},
+		Kea:     config.Kea{APIURL: "http://127.0.0.1:8000/", UsernameFile: "/kea/user", PasswordFile: "/kea/pass"},
 		Network: config.Network{PFAnchor: "bkcp", ManageAnchor: true},
-		Pools: []config.Pool{{Name: "vm-lan", FirstHost: "10.0.20.10", LastHost: "10.0.20.11", Gateway: "10.0.20.1", DNSServers: []string{"10.0.20.1"}, VLAN: 20, KeaSubnetID: 1}},
-		Images: []config.Image{{Name: "freebsd", URL: "https://example/image.raw.xz", CompressedSHA256: strings.Repeat("a", 64), Format: "raw.xz", Loader: "bhyveload"}},
+		Pools:   []config.Pool{{Name: "vm-lan", FirstHost: "10.0.20.10", LastHost: "10.0.20.11", Gateway: "10.0.20.1", DNSServers: []string{"10.0.20.1"}, VLAN: 20, KeaSubnetID: 1}},
+		Images:  []config.Image{{Name: "freebsd", URL: "https://example/image.raw.xz", CompressedSHA256: strings.Repeat("a", 64), Format: "raw.xz", Loader: "bhyveload"}},
 	}
 	firstManifest := config.VMManifest{Schema: 1, Name: "node-a", Owner: "admin", Image: "freebsd", Profile: "jail-host", Pool: "vm-lan", DesiredPower: "running", CPUs: 2, MemoryMB: 4096, DiskGB: 32}
 	first, err := repo.PrepareExecutableApply(ctx, site, "node-a.toml", firstManifest)

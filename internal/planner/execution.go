@@ -133,11 +133,11 @@ func buildExecutable(site config.Site, generation uint64, manifest config.VMMani
 	base := StepInput{
 		Schema: ExecutionInputSchemaVersion, Operation: operation, Resource: normalized.Name, Generation: generation,
 		Specification: normalized, Allocation: allocation,
-		Host: ExecutionHost{VMBridge: site.Host.VMBridge, VMDataset: site.Host.VMDataset, VMRoot: site.Host.VMRoot},
-		Kea: ExecutionKea{APIURL: site.Kea.APIURL, UsernameFile: site.Kea.UsernameFile, PasswordFile: site.Kea.PasswordFile, RequestTimeoutMS: site.Kea.RequestTimeoutMS},
-		Network: ExecutionNetwork{PFAnchor: site.Network.PFAnchor, ManageAnchor: site.Network.ManageAnchor},
-		Pool: ExecutionPool{Gateway: pool.Gateway, DNSServers: append([]string(nil), pool.DNSServers...), VLAN: pool.VLAN},
-		Image: ExecutionImage{Name: image.Name, URL: image.URL, CompressedSHA256: image.CompressedSHA256, Format: image.Format, Loader: image.Loader},
+		Host:           ExecutionHost{VMBridge: site.Host.VMBridge, VMDataset: site.Host.VMDataset, VMRoot: site.Host.VMRoot},
+		Kea:            ExecutionKea{APIURL: site.Kea.APIURL, UsernameFile: site.Kea.UsernameFile, PasswordFile: site.Kea.PasswordFile, RequestTimeoutMS: site.Kea.RequestTimeoutMS},
+		Network:        ExecutionNetwork{PFAnchor: site.Network.PFAnchor, ManageAnchor: site.Network.ManageAnchor},
+		Pool:           ExecutionPool{Gateway: pool.Gateway, DNSServers: append([]string(nil), pool.DNSServers...), VLAN: pool.VLAN},
+		Image:          ExecutionImage{Name: image.Name, URL: image.URL, CompressedSHA256: image.CompressedSHA256, Format: image.Format, Loader: image.Loader},
 		DestroyStorage: destroyStorage,
 	}
 	steps := make([]Step, 0, len(actions))

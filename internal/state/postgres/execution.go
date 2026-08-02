@@ -73,7 +73,7 @@ SET state = CASE WHEN bkcp.vm_effective.state = 'converged' AND bkcp.vm_effectiv
 	_ = declarationChanged
 	return state.PreparedApply{
 		Resource: state.ResourceSummary{UUID: resourceUUID, Name: normalized.Name, Managed: true, Generation: generation, EffectiveState: "pending", OperationStatus: operation.Status},
-		Plan: executable.Plan, Operation: operation, Created: created,
+		Plan:     executable.Plan, Operation: operation, Created: created,
 	}, nil
 }
 
@@ -374,12 +374,24 @@ func loadAllocationTx(ctx context.Context, tx pgx.Tx, resourceUUID string) (stat
 	if err != nil {
 		return state.Allocation{}, err
 	}
-	if ip != nil { out.IPAddress = *ip }
-	if mac != nil { out.MACAddress = *mac }
-	if dataset != nil { out.DatasetName = *dataset }
-	if zvol != nil { out.ZvolName = *zvol }
-	if kea != nil { out.KeaSubnetID = *kea }
-	if digest != nil { out.ImageDigest = *digest }
+	if ip != nil {
+		out.IPAddress = *ip
+	}
+	if mac != nil {
+		out.MACAddress = *mac
+	}
+	if dataset != nil {
+		out.DatasetName = *dataset
+	}
+	if zvol != nil {
+		out.ZvolName = *zvol
+	}
+	if kea != nil {
+		out.KeaSubnetID = *kea
+	}
+	if digest != nil {
+		out.ImageDigest = *digest
+	}
 	return out, nil
 }
 
@@ -394,13 +406,34 @@ func manifestFromNormalized(input config.NormalizedVM) config.VMManifest {
 func siteReferences(site config.Site, manifest config.VMManifest) (config.Pool, config.Image, error) {
 	var pool config.Pool
 	found := false
-	for _, candidate := range site.Pools { if candidate.Name == manifest.Pool { pool = candidate; found = true; break } }
-	if !found { return config.Pool{}, config.Image{}, fmt.Errorf("manifest references unknown pool %q", manifest.Pool) }
+	for _, candidate := range site.Pools {
+		if candidate.Name == manifest.Pool {
+			pool = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		return config.Pool{}, config.Image{}, fmt.Errorf("manifest references unknown pool %q", manifest.Pool)
+	}
 	var image config.Image
 	found = false
-	for _, candidate := range site.Images { if candidate.Name == manifest.Image { image = candidate; found = true; break } }
-	if !found { return config.Pool{}, config.Image{}, fmt.Errorf("manifest references unknown image %q", manifest.Image) }
+	for _, candidate := range site.Images {
+		if candidate.Name == manifest.Image {
+			image = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		return config.Pool{}, config.Image{}, fmt.Errorf("manifest references unknown image %q", manifest.Image)
+	}
 	return pool, image, nil
 }
 
-func nullString(value string) any { if value == "" { return nil }; return value }
+func nullString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}

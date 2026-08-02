@@ -87,20 +87,20 @@ type Operation struct {
 }
 
 type OperationStep struct {
-	OperationUUID      string     `json:"operation_uuid"`
-	Sequence           int        `json:"sequence"`
-	Driver             string     `json:"driver"`
-	Action             string     `json:"action"`
-	InputDigest        string     `json:"input_digest"`
-	InputJSON          string     `json:"input_json,omitempty"`
-	PostconditionJSON  string     `json:"postcondition_json,omitempty"`
-	PostconditionDigest string    `json:"postcondition_digest,omitempty"`
-	Status             string     `json:"status"`
-	Attempts           int        `json:"attempts"`
-	StartedAt          *time.Time `json:"started_at,omitempty"`
-	CompletedAt        *time.Time `json:"completed_at,omitempty"`
-	ErrorCode          string     `json:"error_code,omitempty"`
-	ErrorDetail        string     `json:"error_detail,omitempty"`
+	OperationUUID       string     `json:"operation_uuid"`
+	Sequence            int        `json:"sequence"`
+	Driver              string     `json:"driver"`
+	Action              string     `json:"action"`
+	InputDigest         string     `json:"input_digest"`
+	InputJSON           string     `json:"input_json,omitempty"`
+	PostconditionJSON   string     `json:"postcondition_json,omitempty"`
+	PostconditionDigest string     `json:"postcondition_digest,omitempty"`
+	Status              string     `json:"status"`
+	Attempts            int        `json:"attempts"`
+	StartedAt           *time.Time `json:"started_at,omitempty"`
+	CompletedAt         *time.Time `json:"completed_at,omitempty"`
+	ErrorCode           string     `json:"error_code,omitempty"`
+	ErrorDetail         string     `json:"error_detail,omitempty"`
 }
 
 type Inspection struct {
