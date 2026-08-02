@@ -48,19 +48,18 @@ delete_payload=$(jq -n \
     --arg mac "$MAC_ADDRESS" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
     '{
-        command:"reservation-del",
+        command:"host-del",
         arguments:{
-            "subnet-id":$subnet_id,
-            "identifier-type":"hw-address",
-            identifier:$mac
+            "ipv4-subnet-id":$subnet_id,
+            "hw-address":$mac
         }
     }')
 delete_response=$(kea_request "$delete_payload")
 delete_result=$(printf '%s' "$delete_response" | jq -er '.[0].result')
 if [ "$delete_result" -eq 3 ]; then
-    echo "[!] Kea reservation for ${VM_NAME} is already absent; continuing rollback" >&2
+    echo "[!] Kea host for ${VM_NAME} is already absent; continuing rollback" >&2
 elif [ "$delete_result" -ne 0 ]; then
-    echo "ERROR: Kea reservation-del failed during rollback: $delete_response" >&2
+    echo "ERROR: Kea host-del failed during rollback: $delete_response" >&2
     exit 1
 fi
 

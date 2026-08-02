@@ -56,8 +56,8 @@ if [ -n "$HOST_DB_NAME" ]; then
         }]
         | del(.Dhcp4["hosts-database"])
         | .Dhcp4["hooks-libraries"] |= (
-            map(select(.library != "/usr/local/lib/kea/hooks/libdhcp_pgsql.so"))
-            | [{"library":"/usr/local/lib/kea/hooks/libdhcp_pgsql.so"}] + .
+            map(select(.library != "/usr/local/lib/kea/hooks/libdhcp_pgsql.so" and .library != "/usr/local/lib/kea/hooks/libdhcp_host_cmds.so"))
+            | [{"library":"/usr/local/lib/kea/hooks/libdhcp_pgsql.so"}, {"library":"/usr/local/lib/kea/hooks/libdhcp_host_cmds.so"}] + .
         )
     '
 else

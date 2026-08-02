@@ -173,11 +173,10 @@ rollback() {
                 --arg mac "$MAC_ADDRESS" \
                 --argjson subnet_id "$KEA_SUBNET_ID" \
                 '{
-                    command:"reservation-del",
+                    command:"host-del",
                     arguments:{
-                        "subnet-id":$subnet_id,
-                        "identifier-type":"hw-address",
-                        identifier:$mac
+                        "ipv4-subnet-id":$subnet_id,
+                        "hw-address":$mac
                     }
                 }')
             kea_request "$delete_payload" >/dev/null 2>&1 || true
@@ -333,19 +332,19 @@ add_payload=$(jq -n \
     --arg hostname "$VM_NAME" \
     --argjson subnet_id "$KEA_SUBNET_ID" \
     '{
-        command:"reservation-add",
+        command:"host-add",
         arguments:{
-            reservation:{
-                "subnet-id":$subnet_id,
+            host:{
+                "ipv4-subnet-id":$subnet_id,
                 "hw-address":$mac,
-                "ip-address":$ip,
+                "ipv4-address":$ip,
                 hostname:$hostname
             }
         }
     }')
 add_response=$(kea_request "$add_payload")
 add_result=$(printf '%s' "$add_response" | jq -er '.[0].result')
-[ "$add_result" -eq 0 ] || die "Kea reservation-add failed: $add_response"
+[ "$add_result" -eq 0 ] || die "Kea host-add failed: $add_response"
 kea_reserved=1
 
 echo "[6/7] Starting VM"
