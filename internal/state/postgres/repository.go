@@ -35,6 +35,10 @@ func IsSchemaMissing(err error) bool {
 	return errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "3F000")
 }
 
+func resourceLockKey(controlPlaneID, resourceName string) string {
+	return fmt.Sprintf("%d:%s|2:vm|%d:%s", len(controlPlaneID), controlPlaneID, len(resourceName), resourceName)
+}
+
 func (r *Repository) PrepareApply(ctx context.Context, controlPlaneID, sourcePath string, manifest config.VMManifest) (state.PreparedApply, error) {
 	if err := manifest.Validate(); err != nil {
 		return state.PreparedApply{}, err
@@ -53,7 +57,7 @@ func (r *Repository) PrepareApply(ctx context.Context, controlPlaneID, sourcePat
 		return state.PreparedApply{}, fmt.Errorf("begin prepare transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	lockKey := controlPlaneID + "\x00vm\x00" + normalized.Name
+	lockKey := resourceLockKey(controlPlaneID, normalized.Name)
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockKey); err != nil {
 		return state.PreparedApply{}, fmt.Errorf("lock resource: %w", err)
 	}
