@@ -110,5 +110,14 @@ func (e Executor) Run(ctx context.Context, resourceName string) (state.Inspectio
 	if err := e.Repository.CompleteOperation(ctx, operation.UUID, inspection.Resource.UUID, effective); err != nil {
 		return state.Inspection{}, err
 	}
+	if operation.Action == "delete" {
+		operation.Status = "succeeded"
+		inspection.Operation = &operation
+		inspection.Resource.EffectiveState = "absent"
+		inspection.Resource.OperationStatus = "succeeded"
+		inspection.Effective = &state.Effective{State: "absent", CurrentPlanDigest: operation.PlanDigest}
+		inspection.ResumeStep = nil
+		return inspection, nil
+	}
 	return e.Repository.InspectResource(ctx, resourceName)
 }
