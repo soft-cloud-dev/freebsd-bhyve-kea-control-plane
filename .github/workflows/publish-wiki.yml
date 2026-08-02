@@ -1,0 +1,55 @@
+name: Publish GitHub Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "wiki/**"
+      - ".github/workflows/publish-wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-github-wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish wiki pages
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN || github.token }}
+        run: |
+          set -eu
+
+          wiki_dir="$(mktemp -d)"
+          wiki_url="https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+
+          git init "${wiki_dir}"
+          git -C "${wiki_dir}" remote add origin "${wiki_url}"
+
+          if git -C "${wiki_dir}" fetch --depth=1 origin master; then
+            git -C "${wiki_dir}" checkout -B master FETCH_HEAD
+          else
+            git -C "${wiki_dir}" checkout -B master
+          fi
+
+          find "${wiki_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -R wiki/. "${wiki_dir}/"
+
+          git -C "${wiki_dir}" config user.name "github-actions[bot]"
+          git -C "${wiki_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "${wiki_dir}" add -A
+
+          if git -C "${wiki_dir}" diff --cached --quiet; then
+            echo "Native GitHub Wiki is already synchronized."
+            exit 0
+          fi
+
+          git -C "${wiki_dir}" commit -m "Sync wiki from ${GITHUB_SHA}"
+          git -C "${wiki_dir}" push origin HEAD:master
