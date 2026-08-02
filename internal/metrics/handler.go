@@ -35,6 +35,11 @@ func NewExporter(source Source, version string, queryTimeout time.Duration) *Exp
 }
 
 func (e *Exporter) ServeHTTP(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	switch request.URL.Path {
 	case "/metrics":
 		e.serveMetrics(w, request)
