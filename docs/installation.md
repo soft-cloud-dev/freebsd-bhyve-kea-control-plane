@@ -1,6 +1,6 @@
 # Installation
 
-Review interface names, networks, package versions, service paths, and SSH access before applying this configuration.
+Review interface names, networks, package versions, service paths, SSH access, database authentication, cloud-image policy, and the stable `CONTROL_PLANE_ID` before applying this configuration.
 
 ## Guarded installation
 
@@ -25,7 +25,7 @@ make install \
   VM_DATASET=zroot/vm
 ```
 
-The default installation builds Stork `v2.5.0` from ISC’s official source. This requires more build time and temporary disk space than the other package-based stages. To omit the Kea dashboard, add `STORK_ENABLE=no`.
+The default installation builds Stork `v2.5.0` from ISC's official source. This requires more build time and temporary disk space than the other package-based stages. To omit the Kea dashboard, add `STORK_ENABLE=no`.
 
 Stork host editing requires a writable Kea hosts database. The standard FreeBSD Kea package has its `PGSQL` option disabled. When the required hook is missing, the dependency stage clones the FreeBSD ports tree and rebuilds `net/kea` automatically with `PGSQL` enabled. It uses `/usr/ports` when that path is absent or already contains a complete ports tree. If `/usr/ports` exists but is incomplete, it is preserved and a managed tree at `/var/cache/control-plane/ports` is used instead. The build is pinned to PostgreSQL 16, matching the server installed by this project. Allow extra time and disk space on the first run.
 
@@ -78,7 +78,7 @@ start-services
 validate-freebsd
 ```
 
-Each stage can also be invoked separately, for example:
+Each stage can also be invoked separately:
 
 ```sh
 make init-postgresql
@@ -90,9 +90,104 @@ make init-vm VM_DATASET=zroot/vm LAN_IF=bridge0
 make start-services
 ```
 
-## Cloud image preparation
+## Upgrade an existing installation
 
-Use a guest image that includes cloud-init and has the NoCloud datasource enabled. The image must support reading a CD-ROM labelled `cidata`.
+The integrity update introduces `db/003_mac_allocator.sql`, makes the PostgreSQL Kea hosts database the sole runtime reservation authority, and stops writing runtime reservations into `kea-dhcp4.conf`.
+
+Before upgrading:
+
+```sh
+install -d -m 0700 /root/control-plane-upgrade
+cp -p /usr/local/etc/kea/kea-dhcp4.conf \
+  /root/control-plane-upgrade/kea-dhcp4.conf.before
+sudo -u postgres pg_dump -Fc inventory \
+  > /root/control-plane-upgrade/inventory.dump
+sudo -u postgres pg_dump -Fc kea_hosts \
+  > /root/control-plane-upgrade/kea-hosts.dump
+```
+
+Apply the inventory schema migration:
+
+```sh
+sh scripts/init_postgresql.sh
+```
+
+Confirm the allocator is present:
+
+```sh
+sudo -u postgres psql -d inventory -c '\df allocate_mac'
+```
+
+Re-render service configuration with the same interface, database, and address values used by the installation. When the PostgreSQL hosts backend is enabled, the renderer clears static subnet reservation arrays so they cannot shadow database reservations.
+
+```sh
+make configure-services \
+  EXT_IF=igb0 \
+  MGMT_IF=vlan10 \
+  LAN_IF=bridge0 \
+  MGMT_ADDR=10.0.10.2 \
+  DNS_ADDR=10.0.20.1 \
+  KEA_HOST_DB_NAME=kea_hosts \
+  KEA_HOST_DB_USER=kea_hosts
+```
+
+Validate the rendered authority model before restarting services:
+
+```sh
+jq -e '
+  .Dhcp4["hosts-databases"]
+  | any(.type == "postgresql")
+' /usr/local/etc/kea/kea-dhcp4.conf
+
+jq -e '
+  all(.Dhcp4.subnet4[]; (.reservations // []) | length == 0)
+' /usr/local/etc/kea/kea-dhcp4.conf
+
+kea-dhcp4 -t /usr/local/etc/kea/kea-dhcp4.conf
+```
+
+Then restart through the repository startup path and run host validation:
+
+```sh
+sh scripts/start_services.sh
+make validate-freebsd
+```
+
+Before provisioning another production VM, verify one existing reservation through the authenticated Control Agent and complete one disposable provision/deprovision cycle. Preserve the old configuration and database dumps until that cycle succeeds.
+
+## Cloud-image preparation
+
+The default FreeBSD image includes cloud-init and uses the NoCloud datasource. The guest must support reading a CD-ROM labelled `cidata`.
+
+Pre-fetch and verify the image before the first provisioning run:
+
+```sh
+make fetch-cloud-image
+```
+
+By default the fetcher downloads `CHECKSUM.SHA256` from the same release directory as the compressed image. A production site can pin the compressed digest explicitly:
+
+```sh
+sudo make fetch-cloud-image \
+  FREEBSD_CLOUD_IMAGE_URL='https://download.freebsd.org/releases/VM-IMAGES/14.3-RELEASE/amd64/Latest/FreeBSD-14.3-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz' \
+  FREEBSD_CLOUD_IMAGE_SHA256='REPLACE_WITH_REVIEWED_SHA256'
+```
+
+Alternatively, override only the checksum manifest location:
+
+```sh
+sudo make fetch-cloud-image \
+  FREEBSD_CLOUD_IMAGE_CHECKSUM_URL='https://example.invalid/approved/CHECKSUM.SHA256'
+```
+
+The default cache files are:
+
+```text
+/var/cache/control-plane/freebsd-cloud.raw
+/var/cache/control-plane/freebsd-cloud.raw.verified
+```
+
+The marker records the source URL, compressed digest, and raw digest. The raw cache is reused only when the marker matches and the raw digest verifies. A corrupt or stale cache is replaced through a temporary file and atomic rename.
 
 Keep the trusted management public key on the host:
 
@@ -103,8 +198,18 @@ install -m 0600 /path/to/id_ed25519.pub /root/.ssh/bhyve-admin.pub
 
 The provisioner rejects non-Ed25519 public keys.
 
-The vm-bhyve template attaches `seed.iso` as an `ahci-cd` device. The provisioner creates that ISO inside each guest directory before first boot.
-The repository template and provisioner both enforce vm-bhyve's native `bhyveload` loader for FreeBSD guests.
+The vm-bhyve template attaches `seed.iso` as an `ahci-cd` device. The provisioner creates that ISO inside each guest directory before first boot. The repository template and provisioner both enforce vm-bhyve's native `bhyveload` loader for FreeBSD guests.
+
+## Stable control-plane identity
+
+MAC candidates are derived from a stable control-plane namespace and VM name, then checked transactionally against active inventory. Set the same `CONTROL_PLANE_ID` on hosts that share one inventory database, and use a different value for independent inventories.
+
+```sh
+CONTROL_PLANE_ID=softcloud-lab-01
+export CONTROL_PLANE_ID
+```
+
+Record this value in site configuration management. Changing it does not rewrite existing MAC addresses, but it changes candidates allocated for future guests.
 
 ## Manual validation
 
@@ -127,12 +232,25 @@ Stork Kea exporter  127.0.0.1:9547
 Prometheus          127.0.0.1:9090
 node_exporter       127.0.0.1:9100
 postgres_exporter   127.0.0.1:9187
-Kea Control Agent   127.0.0.1:8000
+Kea Control Agent   127.0.0.1:8000 with HTTP Basic authentication
+```
+
+Verify the API without exposing credentials in documentation or logs:
+
+```sh
+KEA_API_USER=$(sed -n '1p' /usr/local/etc/kea/kea-api-user)
+KEA_API_PASSWORD=$(sed -n '1p' /usr/local/etc/kea/kea-api-password)
+
+curl -fsS \
+  --user "${KEA_API_USER}:${KEA_API_PASSWORD}" \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"status-get"}' \
+  http://127.0.0.1:8000/ | jq .
 ```
 
 ## Finish Stork enrollment
 
-Browse to `http://MGMT_ADDR:8080` from either the management network or the VM LAN. Keeping one canonical Stork address prevents generated agent installers from advertising a wildcard listener. The first login is `admin` / `admin`; Stork immediately requires a password change. Then open **Services → Machines → Unauthorized**, compare the displayed agent token with `/var/lib/stork-agent/tokens/agent-token.txt`, and authorize the local Kea host.
+Browse to `http://MGMT_ADDR:8080` from either the management network or the VM LAN. Keeping one canonical Stork address prevents generated agent installers from advertising a wildcard listener. The first login is `admin` / `admin`; Stork immediately requires a password change. Then open **Services -> Machines -> Unauthorized**, compare the displayed agent token with `/var/lib/stork-agent/tokens/agent-token.txt`, and authorize the local Kea host.
 
 The Stork agent runs on the host rather than in a separate jail because it must inspect the Kea process and configuration. Its control listener and Prometheus exporter remain loopback-only. The UI is plain HTTP initially; terminate TLS at Stork or an authenticated management reverse proxy before using it across an untrusted network.
 
