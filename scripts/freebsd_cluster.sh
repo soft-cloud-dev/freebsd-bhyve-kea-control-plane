@@ -198,9 +198,11 @@ cluster_down() {
         down_index=$((down_index - 1))
     done
 
-    rm -f \
-        "${CLUSTER_STATE_DIR}/${CLUSTER_NODE_PREFIX}.tsv" \
-        "${CLUSTER_STATE_DIR}/${CLUSTER_NODE_PREFIX}.known_hosts"
+    if [ "$down_status" -eq 0 ]; then
+        rm -f \
+            "${CLUSTER_STATE_DIR}/${CLUSTER_NODE_PREFIX}.tsv" \
+            "${CLUSTER_STATE_DIR}/${CLUSTER_NODE_PREFIX}.known_hosts"
+    fi
     return "$down_status"
 }
 
@@ -217,6 +219,23 @@ case "$CLUSTER_NODE_COUNT" in
 esac
 [ "$CLUSTER_NODE_COUNT" -ge 1 ] && [ "$CLUSTER_NODE_COUNT" -le 99 ] || \
     die "cluster node count must be between 1 and 99"
+
+require_root
+require_commands vm psql
+
+case "$ACTION" in
+    status)
+        cluster_status
+        exit 0
+        ;;
+    down)
+        [ -r "$CLUSTER_NODE_DEPROVISIONER" ] || \
+            die "cluster deprovisioner is not readable: $CLUSTER_NODE_DEPROVISIONER"
+        cluster_down
+        exit $?
+        ;;
+esac
+
 case "$CLUSTER_BOOT_TIMEOUT" in
     ''|*[!0-9]*|0) die "CLUSTER_BOOT_TIMEOUT must be a positive integer" ;;
 esac
@@ -231,22 +250,10 @@ case "$CLUSTER_SSH_USER" in
     ''|*[!a-z0-9_-]*|[0-9-]*) die "invalid cluster SSH user: $CLUSTER_SSH_USER" ;;
 esac
 
-require_root
-require_commands vm psql install mktemp
+require_commands install mktemp
 [ -r "$CLUSTER_PROFILE_FILE" ] || die "cluster cloud-init profile is not readable: $CLUSTER_PROFILE_FILE"
 [ -r "$CLUSTER_NODE_PROVISIONER" ] || die "cluster provisioner is not readable: $CLUSTER_NODE_PROVISIONER"
 [ -r "$CLUSTER_NODE_DEPROVISIONER" ] || die "cluster deprovisioner is not readable: $CLUSTER_NODE_DEPROVISIONER"
-
-case "$ACTION" in
-    status)
-        cluster_status
-        exit 0
-        ;;
-    down)
-        cluster_down
-        exit $?
-        ;;
-esac
 
 preflight_index=1
 while [ "$preflight_index" -le "$CLUSTER_NODE_COUNT" ]; do
