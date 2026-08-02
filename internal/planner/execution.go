@@ -43,6 +43,11 @@ type ExecutionNetwork struct {
 	ManageAnchor bool   `json:"manage_anchor"`
 }
 
+type ExecutionServices struct {
+	Manage bool     `json:"manage"`
+	Names  []string `json:"names"`
+}
+
 type ExecutionPool struct {
 	Gateway    string   `json:"gateway"`
 	DNSServers []string `json:"dns_servers"`
@@ -70,6 +75,7 @@ type StepInput struct {
 	Host           ExecutionHost       `json:"host"`
 	Kea            ExecutionKea        `json:"kea"`
 	Network        ExecutionNetwork    `json:"network"`
+	Services       ExecutionServices   `json:"services"`
 	Pool           ExecutionPool       `json:"pool"`
 	Image          ExecutionImage      `json:"image"`
 	DestroyStorage bool                `json:"destroy_storage,omitempty"`
@@ -87,7 +93,7 @@ type ExecutablePlan struct {
 }
 
 func BuildExecutableApply(site config.Site, generation uint64, manifest config.VMManifest, allocation Allocation) (ExecutablePlan, error) {
-	return buildExecutable(site, generation, manifest, allocation, "apply", false, [][2]string{
+	actions := [][2]string{
 		{"image", "ensure-verified"},
 		{"zfs", "ensure-storage"},
 		{"cloudinit", "ensure-seed"},
@@ -97,7 +103,11 @@ func BuildExecutableApply(site config.Site, generation uint64, manifest config.V
 		{"pf", "ensure-rules"},
 		{"vmbhyve", "ensure-power-state"},
 		{"observer", "observe-all"},
-	})
+	}
+	if site.Services.Manage {
+		actions = append([][2]string{{"service", "ensure-ready"}}, actions...)
+	}
+	return buildExecutable(site, generation, manifest, allocation, "apply", false, actions)
 }
 
 func BuildExecutableDelete(site config.Site, generation uint64, manifest config.VMManifest, allocation Allocation, destroyStorage bool) (ExecutablePlan, error) {
@@ -144,6 +154,7 @@ func buildExecutable(site config.Site, generation uint64, manifest config.VMMani
 		},
 		Kea:            ExecutionKea{APIURL: site.Kea.APIURL, UsernameFile: site.Kea.UsernameFile, PasswordFile: site.Kea.PasswordFile, RequestTimeoutMS: site.Kea.RequestTimeoutMS},
 		Network:        ExecutionNetwork{PFAnchor: site.Network.PFAnchor, ManageAnchor: site.Network.ManageAnchor},
+		Services:       ExecutionServices{Manage: site.Services.Manage, Names: append([]string(nil), site.Services.Names...)},
 		Pool:           ExecutionPool{Gateway: pool.Gateway, DNSServers: append([]string(nil), pool.DNSServers...), VLAN: pool.VLAN},
 		Image:          ExecutionImage{Name: image.Name, URL: image.URL, CompressedSHA256: image.CompressedSHA256, Format: image.Format, Loader: image.Loader},
 		DestroyStorage: destroyStorage,
