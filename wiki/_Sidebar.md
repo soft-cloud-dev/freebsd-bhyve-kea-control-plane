@@ -1,15 +1,14 @@
 ## Project Wiki
 
-- [Home](Home.md)
-- [Getting Started](Getting-Started.md)
-- [Architecture](Architecture.md)
-- [CLI and Operations](CLI-and-Operations.md)
-- [Development and Testing](Development-and-Testing.md)
-- [Roadmap](Roadmap.md)
+- [Home](Home)
+- [Getting Started](Getting-Started)
+- [Architecture](Architecture)
+- [CLI and Operations](CLI-and-Operations)
+- [Development and Roadmap](Development-and-Roadmap)
 
-## Canonical repository docs
+## Repository contracts
 
-- [Implementation contract](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/DESIGN.md)
-- [State contract](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/STATE.md)
-- [Migration policy](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/MIGRATION.md)
-- [Canonical architecture](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/streamlined-v2.md)
+- [Implementation](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/DESIGN.md)
+- [State](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/STATE.md)
+- [Migration](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/MIGRATION.md)
+- [Architecture](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/streamlined-v2.md)
