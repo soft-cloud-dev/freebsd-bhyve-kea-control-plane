@@ -15,6 +15,7 @@ type Site struct {
 	Database       Database `json:"database"`
 	Kea            Kea      `json:"kea"`
 	Network        Network  `json:"network"`
+	Services       Services `json:"services"`
 	Pools          []Pool   `json:"pools"`
 	Images         []Image  `json:"images"`
 }
@@ -45,6 +46,11 @@ type Network struct {
 	ManageAnchor bool   `json:"manage_anchor"`
 }
 
+type Services struct {
+	Manage bool     `json:"manage"`
+	Names  []string `json:"names"`
+}
+
 type Pool struct {
 	Name        string   `json:"name"`
 	Subnet      string   `json:"subnet"`
@@ -69,7 +75,7 @@ func LoadSite(path string) (Site, error) {
 	if err != nil {
 		return Site{}, fmt.Errorf("decode site config: %w", err)
 	}
-	if err := rejectUnknown(doc, "schema", "control_plane_id", "host", "database", "kea", "network", "pools", "images"); err != nil {
+	if err := rejectUnknown(doc, "schema", "control_plane_id", "host", "database", "kea", "network", "services", "pools", "images"); err != nil {
 		return Site{}, fmt.Errorf("decode site config: %w", err)
 	}
 	site, err := decodeSite(doc)
@@ -167,6 +173,22 @@ func decodeSite(doc map[string]any) (Site, error) {
 	}
 	if site.Network.ManageAnchor, err = requiredBool(network, "manage_anchor"); err != nil {
 		return Site{}, err
+	}
+
+	if serviceValue, exists := doc["services"]; exists {
+		services, ok := serviceValue.(map[string]any)
+		if !ok {
+			return Site{}, fmt.Errorf("services must be a table")
+		}
+		if err := rejectUnknown(services, "manage", "names"); err != nil {
+			return Site{}, fmt.Errorf("services: %w", err)
+		}
+		if site.Services.Manage, err = optionalBool(services, "manage"); err != nil {
+			return Site{}, err
+		}
+		if site.Services.Names, err = optionalStrings(services, "names"); err != nil {
+			return Site{}, err
+		}
 	}
 
 	poolTables, err := requiredArrayTables(doc, "pools")
