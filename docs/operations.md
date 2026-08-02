@@ -15,24 +15,69 @@ sudo PGDATABASE=inventory \
   sh scripts/provision_vm.sh db-node-01 freebsd
 ```
 
-The provisioner:
+The provisioner rejects duplicate state, verifies the image, creates the guest, allocates IP/MAC/inventory state, adds the PostgreSQL-backed Kea reservation, starts the VM, and marks it `running`. Failures trigger best-effort cleanup; host crashes may still require reconciliation.
 
-1. rejects duplicate or stale active state;
-2. verifies and writes the cloud image;
-3. creates the guest and NoCloud seed;
-4. allocates IP, MAC, and inventory state in PostgreSQL;
-5. adds an authenticated database-backed Kea reservation;
-6. starts the VM and marks the inventory row `running`.
+The guest must support cloud-init NoCloud. The provisioner enforces `bhyveload` before first boot. `SSH_AUTHORIZED_KEY` may replace `SSH_PUBLIC_KEY_FILE`.
 
-Failures trigger best-effort cleanup. A host crash may still leave state requiring reconciliation.
+## Provision a three-node FreeBSD cluster
 
-The guest must use cloud-init with the NoCloud datasource. The provisioner enforces the native `bhyveload` loader before first boot.
+The cluster lifecycle provisions three jail-ready FreeBSD guests, waits for cloud-init over SSH, writes a local inventory, and optionally configures `kubectl` on the FreeBSD control-plane host.
 
-For direct key input, `SSH_AUTHORIZED_KEY` may replace `SSH_PUBLIC_KEY_FILE`.
+```sh
+sudo make cluster-up \
+  CONTROL_PLANE_ID=softcloud-lab-01 \
+  SSH_PUBLIC_KEY_FILE=/root/.ssh/id_ed25519.pub \
+  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519 \
+  KUBECONFIG_SOURCE=/root/kubeconfig
+```
 
-## Provision jail-ready guests
+Defaults:
 
-Single FreeBSD WireGuard and jail node:
+```text
+nodes             freebsd-node-01 .. freebsd-node-03
+node count        3
+cloud-init profile config/cloud-init/freebsd-jail-node.yaml
+boot timeout      600 seconds per node
+inventory         /var/db/freebsd-bhyve-kea-control-plane/clusters/freebsd-node.tsv
+kubeconfig        /root/.kube/config
+```
+
+The workflow performs all conflict checks before creating a VM. If a later node fails, it deprovisions only the nodes created by that run. A readable private key enables SSH/cloud-init readiness checks; without one, provisioning succeeds but readiness checks are skipped with a warning.
+
+The profile installs WireGuard tooling and enables native jails. It does not generate WireGuard keys, peers, routes, or jail definitions.
+
+`kubectl` behavior:
+
+- `KUBECTL_BOOTSTRAP=yes` installs the FreeBSD `kubectl` package when missing;
+- `KUBECONFIG_SOURCE=/path/config` installs the kubeconfig atomically with mode `0600`;
+- `KUBECTL_VERIFY=yes` verifies the current context and API reachability with `kubectl cluster-info`;
+- without a kubeconfig, the client is installed but no Kubernetes API is configured.
+
+The FreeBSD guests are not configured as Kubernetes kubelet nodes. This command bootstraps an administrative client for an existing Kubernetes API.
+
+Inspect or remove the topology:
+
+```sh
+sudo make cluster-status
+sudo make cluster-down
+```
+
+Override the topology when needed:
+
+```sh
+sudo make cluster-up \
+  CLUSTER_NODE_PREFIX=lab-node \
+  CLUSTER_NODE_COUNT=3 \
+  CLUSTER_BOOT_TIMEOUT=900 \
+  KUBECTL_BOOTSTRAP=no \
+  CONTROL_PLANE_ID=softcloud-lab-01 \
+  SSH_PUBLIC_KEY_FILE=/root/.ssh/id_ed25519.pub \
+  SSH_PRIVATE_KEY_FILE=/root/.ssh/id_ed25519
+```
+
+The legacy `scripts/provision_freebsd_jail_cluster.sh` entry point remains available and routes through the same lifecycle with the historical `jail-node-01` naming and kubectl bootstrap disabled by default.
+
+Single jail-ready guest:
 
 ```sh
 sudo PGDATABASE=inventory \
@@ -42,19 +87,6 @@ sudo PGDATABASE=inventory \
   SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
   sh scripts/provision_freebsd_jail_node.sh jail-node-01
 ```
-
-Three-node topology:
-
-```sh
-sudo PGDATABASE=inventory \
-  PGUSER=postgres \
-  IPAM_POOL=vm-lan \
-  CONTROL_PLANE_ID=softcloud-lab-01 \
-  SSH_PUBLIC_KEY_FILE="$HOME/.ssh/id_ed25519.pub" \
-  sh scripts/provision_freebsd_jail_cluster.sh
-```
-
-The profile installs WireGuard tooling and enables native jails. It does not create keys, peers, routes, or jail definitions.
 
 Inside a guest:
 
@@ -75,7 +107,7 @@ sudo sh scripts/migrate_vm_to_bhyveload.sh db-node-03
 
 The script restores the previous configuration and loader if the guarded restart fails.
 
-## Deprovision
+## Deprovision a VM
 
 ```sh
 sudo make deprovision-vm VM_NAME=db-node-01
@@ -223,7 +255,7 @@ Back up:
 - vm-bhyve templates and guest definitions;
 - ZFS snapshots and replication targets;
 - SSH host keys and future CA trust anchors;
-- site-controlled image URLs, pinned digests, and `CONTROL_PLANE_ID`.
+- site-controlled image URLs, pinned digests, `CONTROL_PLANE_ID`, and cluster kubeconfig sources.
 
 The verified cloud-image cache is reproducible and does not need backup when its source and digest policy are recorded.
 
