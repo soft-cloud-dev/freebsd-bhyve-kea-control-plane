@@ -42,7 +42,7 @@ func (e Executor) Run(ctx context.Context, resourceName string) (state.Inspectio
 	if err != nil {
 		return state.Inspection{}, err
 	}
-	unlock, err := e.Repository.LockExecution(ctx, inspection.Resource.UUID)
+	unlock, err := e.Repository.LockExecution(ctx, resourceName)
 	if err != nil {
 		return state.Inspection{}, err
 	}
