@@ -38,16 +38,10 @@ printf '%s\n' \
     'current-context: softcloud'
 EOF_SSH
 
-cat > "${bin_dir}/ssh-keygen" <<'EOF_SSH_KEYGEN'
-#!/bin/sh
-exit 0
-EOF_SSH_KEYGEN
-
 chmod 0755 \
     "${bin_dir}/id" \
     "${bin_dir}/kubectl" \
-    "${bin_dir}/ssh" \
-    "${bin_dir}/ssh-keygen"
+    "${bin_dir}/ssh"
 
 SSH_LOG="${work}/ssh.log"
 KUBECTL_LOG="${work}/kubectl.log"
@@ -60,16 +54,17 @@ remote_dest="${work}/remote/config"
 PATH="${bin_dir}:$PATH" \
 KUBECONFIG_DEST="$remote_dest" \
 KUBECONFIG_REMOTE_HOST=ipa.softcloud.dev \
-KUBECONFIG_REMOTE_USER=root \
+KUBECONFIG_REMOTE_USER=fedora \
 KUBECONFIG_REMOTE_PATH=/etc/kubernetes/admin.conf \
 KUBECONFIG_REMOTE_SSH_KEY="${work}/id_ed25519" \
+KUBECONFIG_REMOTE_SUDO=yes \
 KUBECONFIG_KNOWN_HOSTS="${work}/state/known_hosts" \
 KUBECTL_VERIFY=yes \
     sh "$BOOTSTRAP_SCRIPT" > "${work}/remote.out"
 
 grep -q '^apiVersion: v1$' "$remote_dest"
-grep -q 'root@ipa.softcloud.dev' "$SSH_LOG"
-grep -q 'cat /etc/kubernetes/admin.conf' "$SSH_LOG"
+grep -q 'fedora@ipa.softcloud.dev' "$SSH_LOG"
+grep -q 'sudo -n cat /etc/kubernetes/admin.conf' "$SSH_LOG"
 grep -q "${remote_dest}|config current-context" "$KUBECTL_LOG"
 grep -q "${remote_dest}|cluster-info --request-timeout=10s" "$KUBECTL_LOG"
 grep -q 'kubectl configured at' "${work}/remote.out"
