@@ -31,10 +31,10 @@ It then installs dependencies and configures:
 
 The standard FreeBSD Kea package normally lacks PostgreSQL host support. When required, the dependency stage rebuilds `net/kea` with `PGSQL` enabled and verifies the PostgreSQL, host-command, and subnet-command hooks.
 
-To omit Stork:
+To omit Stork, export the option before running the standard install command:
 
 ```sh
-make install ... STORK_ENABLE=no
+export STORK_ENABLE=no
 ```
 
 To use an existing ports tree:
@@ -43,11 +43,10 @@ To use an existing ports tree:
 make install-dependencies KEA_PORTS_DIR=/path/to/ports
 ```
 
-To configure PostgreSQL metrics, pass a DSN appropriate for the site's authentication policy:
+To configure PostgreSQL metrics, export a DSN appropriate for the site's authentication policy before running the standard install command:
 
 ```sh
-make install ... \
-  POSTGRES_EXPORTER_DSN='postgresql://prometheus:REPLACE@127.0.0.1:5432/inventory?sslmode=disable'
+export POSTGRES_EXPORTER_DSN='postgresql://prometheus:REPLACE@127.0.0.1:5432/inventory?sslmode=disable'
 ```
 
 The generated exporter configuration is permission-restricted. Prefer peer authentication, a password file, or certificates for long-term use.
