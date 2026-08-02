@@ -9,10 +9,10 @@ KUBECONFIG_SOURCE="${KUBECONFIG_SOURCE:-}"
 KUBECONFIG_DEST="${KUBECONFIG_DEST:-/root/.kube/config}"
 KUBECONFIG_REFRESH="${KUBECONFIG_REFRESH:-no}"
 KUBECONFIG_REMOTE_HOST="${KUBECONFIG_REMOTE_HOST:-ipa.softcloud.dev}"
-KUBECONFIG_REMOTE_USER="${KUBECONFIG_REMOTE_USER:-root}"
+KUBECONFIG_REMOTE_USER="${KUBECONFIG_REMOTE_USER:-fedora}"
 KUBECONFIG_REMOTE_PATH="${KUBECONFIG_REMOTE_PATH:-/etc/kubernetes/admin.conf}"
 KUBECONFIG_REMOTE_SSH_KEY="${KUBECONFIG_REMOTE_SSH_KEY:-${SSH_PRIVATE_KEY_FILE:-}}"
-KUBECONFIG_REMOTE_SUDO="${KUBECONFIG_REMOTE_SUDO:-no}"
+KUBECONFIG_REMOTE_SUDO="${KUBECONFIG_REMOTE_SUDO:-yes}"
 KUBECONFIG_KNOWN_HOSTS="${KUBECONFIG_KNOWN_HOSTS:-/var/db/freebsd-bhyve-kea-control-plane/clusters/kubernetes-control-plane.known_hosts}"
 
 case "$KUBECTL_BOOTSTRAP:$KUBECTL_VERIFY:$KUBECONFIG_REFRESH:$KUBECONFIG_REMOTE_SUDO" in
@@ -25,20 +25,6 @@ esac
 
 [ "$KUBECTL_BOOTSTRAP" = yes ] || exit 0
 [ -n "$KUBECONFIG_DEST" ] || die "KUBECONFIG_DEST must not be empty"
-
-case "$KUBECONFIG_REMOTE_HOST" in
-    ''|*[!A-Za-z0-9._:-]*) die "invalid kubeconfig remote host: $KUBECONFIG_REMOTE_HOST" ;;
-esac
-case "$KUBECONFIG_REMOTE_USER" in
-    ''|*[!A-Za-z0-9._-]*) die "invalid kubeconfig remote user: $KUBECONFIG_REMOTE_USER" ;;
-esac
-case "$KUBECONFIG_REMOTE_PATH" in
-    /*) ;;
-    *) die "KUBECONFIG_REMOTE_PATH must be absolute" ;;
-esac
-case "$KUBECONFIG_REMOTE_PATH" in
-    *[!A-Za-z0-9_./-]*) die "invalid kubeconfig remote path: $KUBECONFIG_REMOTE_PATH" ;;
-esac
 
 require_root
 require_commands install mktemp
@@ -74,7 +60,21 @@ elif [ -s "$KUBECONFIG_DEST" ] && [ "$KUBECONFIG_REFRESH" = no ]; then
     chmod 0600 "$KUBECONFIG_DEST"
     kubeconfig_origin=$KUBECONFIG_DEST
 else
-    require_commands ssh ssh-keygen
+    case "$KUBECONFIG_REMOTE_HOST" in
+        ''|*[!A-Za-z0-9._:-]*) die "invalid kubeconfig remote host: $KUBECONFIG_REMOTE_HOST" ;;
+    esac
+    case "$KUBECONFIG_REMOTE_USER" in
+        ''|*[!A-Za-z0-9._-]*) die "invalid kubeconfig remote user: $KUBECONFIG_REMOTE_USER" ;;
+    esac
+    case "$KUBECONFIG_REMOTE_PATH" in
+        /*) ;;
+        *) die "KUBECONFIG_REMOTE_PATH must be absolute" ;;
+    esac
+    case "$KUBECONFIG_REMOTE_PATH" in
+        *[!A-Za-z0-9_./-]*) die "invalid kubeconfig remote path: $KUBECONFIG_REMOTE_PATH" ;;
+    esac
+
+    require_commands ssh
     if [ -n "$KUBECONFIG_REMOTE_SSH_KEY" ]; then
         [ -r "$KUBECONFIG_REMOTE_SSH_KEY" ] || \
             die "kubeconfig SSH key is not readable: $KUBECONFIG_REMOTE_SSH_KEY"
