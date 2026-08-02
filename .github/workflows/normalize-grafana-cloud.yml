@@ -1,0 +1,33 @@
+name: Normalize Grafana Cloud Configuration
+
+on:
+  push:
+    branches:
+      - feat/grafana-cloud-postgres-observability
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/grafana-cloud-postgres-observability
+      - name: Format Alloy configuration
+        run: |
+          docker run --rm \
+            -v "$PWD/observability/grafana-cloud/postgres:/workspace" \
+            grafana/alloy:v1.18.0 \
+            fmt --write /workspace/config.alloy
+      - name: Commit canonical formatting
+        run: |
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add observability/grafana-cloud/postgres/config.alloy
+          git diff --cached --quiet && exit 0
+          git commit -m 'style(observability): format Alloy configuration'
+          git push origin HEAD:feat/grafana-cloud-postgres-observability
