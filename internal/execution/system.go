@@ -155,42 +155,112 @@ func (d *SystemDriver) ensureImage(ctx context.Context, input planner.StepInput)
 }
 
 func (d *SystemDriver) ensureStorage(ctx context.Context, input planner.StepInput) (Result, error) {
+	datasetExists, err := d.zfsExists(ctx, input.Allocation.DatasetName)
+	if err != nil {
+		return Result{}, err
+	}
 	datasetCreated := false
-	if _, err := d.Runner.Run(ctx, "zfs", "list", "-H", "-o", "name", input.Allocation.DatasetName); err != nil {
-		if _, createErr := d.Runner.Run(ctx, "zfs", "create", "-p", input.Allocation.DatasetName); createErr != nil {
-			return Result{}, createErr
+	if !datasetExists {
+		if _, err := d.Runner.Run(ctx, "zfs", "create", "-p", input.Allocation.DatasetName); err != nil {
+			return Result{}, err
 		}
 		datasetCreated = true
 	}
+
+	zvolExists, err := d.zfsExists(ctx, input.Allocation.ZvolName)
+	if err != nil {
+		return Result{}, err
+	}
 	zvolCreated := false
-	if _, err := d.Runner.Run(ctx, "zfs", "list", "-H", "-o", "name", input.Allocation.ZvolName); err != nil {
+	if !zvolExists {
 		size := strconv.Itoa(input.Specification.DiskGB) + "G"
-		if _, createErr := d.Runner.Run(ctx, "zfs", "create", "-V", size, input.Allocation.ZvolName); createErr != nil {
-			return Result{}, createErr
+		if _, err := d.Runner.Run(ctx, "zfs", "create", "-s", "-V", size, "-o", "volmode=dev", input.Allocation.ZvolName); err != nil {
+			return Result{}, err
 		}
 		zvolCreated = true
 	}
-	if zvolCreated {
-		rawPath := filepath.Join(input.Host.VMRoot, ".bkcp", "images", input.Image.Name+".raw")
-		if _, err := os.Stat(rawPath); err != nil {
-			return Result{}, fmt.Errorf("verified raw image unavailable: %w", err)
+
+	expectedSize := int64(input.Specification.DiskGB) * 1024 * 1024 * 1024
+	volsizeOutput, err := d.Runner.Run(ctx, "zfs", "get", "-H", "-p", "-o", "value", "volsize", input.Allocation.ZvolName)
+	if err != nil {
+		return Result{}, err
+	}
+	actualSize, err := strconv.ParseInt(strings.TrimSpace(string(volsizeOutput)), 10, 64)
+	if err != nil {
+		return Result{}, fmt.Errorf("parse zvol size: %w", err)
+	}
+	if actualSize != expectedSize {
+		return Result{}, fmt.Errorf("%w: zvol %s has size %d, expected %d", state.ErrBlocked, input.Allocation.ZvolName, actualSize, expectedSize)
+	}
+
+	rawPath := filepath.Join(input.Host.VMRoot, ".bkcp", "images", input.Image.Name+".raw")
+	markerPath := rawPath + ".verified.json"
+	var imageMarker map[string]string
+	encoded, err := os.ReadFile(markerPath)
+	if err != nil {
+		return Result{}, fmt.Errorf("read verified image marker: %w", err)
+	}
+	if err := json.Unmarshal(encoded, &imageMarker); err != nil {
+		return Result{}, fmt.Errorf("decode verified image marker: %w", err)
+	}
+	rawDigest := imageMarker["raw_sha256"]
+	if rawDigest == "" {
+		return Result{}, fmt.Errorf("%w: verified image marker has no raw digest", state.ErrBlocked)
+	}
+	if actualDigest, err := fileSHA256(rawPath); err != nil || actualDigest != rawDigest {
+		if err != nil {
+			return Result{}, err
 		}
+		return Result{}, fmt.Errorf("%w: verified raw image digest changed", state.ErrBlocked)
+	}
+
+	if zvolCreated {
 		device := "/dev/zvol/" + input.Allocation.ZvolName
+		if _, err := os.Stat(device); err != nil {
+			return Result{}, fmt.Errorf("zvol device unavailable: %w", err)
+		}
 		if _, err := d.Runner.Run(ctx, "dd", "if="+rawPath, "of="+device, "bs=1M", "status=none"); err != nil {
 			return Result{}, err
 		}
+		if _, err := d.Runner.Run(ctx, "zfs", "set", "bkcp:image-sha256="+rawDigest, input.Allocation.ZvolName); err != nil {
+			return Result{}, err
+		}
 	}
-	return Result{Postcondition: map[string]any{"dataset": input.Allocation.DatasetName, "zvol": input.Allocation.ZvolName, "dataset_created": datasetCreated, "zvol_created": zvolCreated}}, nil
+
+	propertyOutput, err := d.Runner.Run(ctx, "zfs", "get", "-H", "-o", "value", "bkcp:image-sha256", input.Allocation.ZvolName)
+	if err != nil {
+		return Result{}, err
+	}
+	if strings.TrimSpace(string(propertyOutput)) != rawDigest {
+		return Result{}, fmt.Errorf("%w: zvol image identity is missing or differs", state.ErrBlocked)
+	}
+
+	return Result{Postcondition: map[string]any{
+		"dataset": input.Allocation.DatasetName, "zvol": input.Allocation.ZvolName,
+		"volsize": actualSize, "image_sha256": rawDigest,
+		"dataset_created": datasetCreated, "zvol_created": zvolCreated,
+	}}, nil
 }
 
 func (d *SystemDriver) ensureStorageAbsent(ctx context.Context, input planner.StepInput) (Result, error) {
 	if !input.DestroyStorage {
 		return Result{}, fmt.Errorf("%w: storage destruction was not authorized", state.ErrBlocked)
 	}
-	if _, err := d.Runner.Run(ctx, "zfs", "list", "-H", "-o", "name", input.Allocation.DatasetName); err == nil {
+	exists, err := d.zfsExists(ctx, input.Allocation.DatasetName)
+	if err != nil {
+		return Result{}, err
+	}
+	if exists {
 		if _, err := d.Runner.Run(ctx, "zfs", "destroy", "-r", input.Allocation.DatasetName); err != nil {
 			return Result{}, err
 		}
+	}
+	exists, err = d.zfsExists(ctx, input.Allocation.DatasetName)
+	if err != nil {
+		return Result{}, err
+	}
+	if exists {
+		return Result{}, fmt.Errorf("%w: dataset still exists", state.ErrDrift)
 	}
 	return Result{Postcondition: map[string]any{"dataset": input.Allocation.DatasetName, "absent": true}}, nil
 }
@@ -548,7 +618,7 @@ func (d *SystemDriver) zfsExists(ctx context.Context, name string) (bool, error)
 		return true, nil
 	}
 	lower := strings.ToLower(err.Error())
-	if strings.Contains(lower, "dataset does not exist") || strings.Contains(lower, "cannot open") || strings.Contains(lower, "does not exist") {
+	if strings.Contains(lower, "dataset does not exist") || strings.Contains(lower, "does not exist") || strings.Contains(lower, "no such dataset") {
 		return false, nil
 	}
 	return false, err
