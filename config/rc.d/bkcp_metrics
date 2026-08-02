@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# PROVIDE: bkcp_metrics
+# REQUIRE: NETWORKING postgresql
+# KEYWORD: shutdown
+#
+# Add the following to /etc/rc.conf:
+#
+# bkcp_metrics_enable="YES"
+# bkcp_metrics_user="bkcp"
+# bkcp_metrics_config="/usr/local/etc/bkcp/site.toml"
+# bkcp_metrics_listen="127.0.0.1:9188"
+
+. /etc/rc.subr
+
+name="bkcp_metrics"
+rcvar="bkcp_metrics_enable"
+desc="BKCP Prometheus metrics exporter"
+
+load_rc_config "$name"
+
+: ${bkcp_metrics_enable:="NO"}
+: ${bkcp_metrics_user:="bkcp"}
+: ${bkcp_metrics_config:="/usr/local/etc/bkcp/site.toml"}
+: ${bkcp_metrics_listen:="127.0.0.1:9188"}
+: ${bkcp_metrics_pidfile:="/var/run/bkcp_metrics.pid"}
+: ${bkcp_metrics_logfile:="/var/log/bkcp_metrics.log"}
+
+required_files="${bkcp_metrics_config}"
+pidfile="${bkcp_metrics_pidfile}"
+procname="/usr/local/sbin/cpctl"
+command="/usr/sbin/daemon"
+command_args="-f -p ${pidfile} -u ${bkcp_metrics_user} -o ${bkcp_metrics_logfile} ${procname} metrics --config ${bkcp_metrics_config} --listen ${bkcp_metrics_listen}"
+
+run_rc_command "$1"
