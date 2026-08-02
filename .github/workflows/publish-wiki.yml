@@ -6,6 +6,7 @@ on:
     paths:
       - "wiki/**"
       - ".github/workflows/publish-wiki.yml"
+  gollum:
   workflow_dispatch:
 
 permissions:
@@ -30,14 +31,15 @@ jobs:
           wiki_dir="$(mktemp -d)"
           wiki_url="https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
 
+          if ! git ls-remote "${wiki_url}" HEAD >/dev/null 2>&1; then
+            echo "::notice::Native GitHub Wiki is disabled or has no initial page. Enable Wiki in repository Settings and create the first Home page; the resulting gollum event will synchronize the version-controlled pages."
+            exit 0
+          fi
+
           git init "${wiki_dir}"
           git -C "${wiki_dir}" remote add origin "${wiki_url}"
-
-          if git -C "${wiki_dir}" fetch --depth=1 origin master; then
-            git -C "${wiki_dir}" checkout -B master FETCH_HEAD
-          else
-            git -C "${wiki_dir}" checkout -B master
-          fi
+          git -C "${wiki_dir}" fetch --depth=1 origin master
+          git -C "${wiki_dir}" checkout -B master FETCH_HEAD
 
           find "${wiki_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -R wiki/. "${wiki_dir}/"
