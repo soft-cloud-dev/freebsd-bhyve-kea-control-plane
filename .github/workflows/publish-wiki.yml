@@ -32,8 +32,8 @@ jobs:
           wiki_url="https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
 
           if ! git ls-remote "${wiki_url}" HEAD >/dev/null 2>&1; then
-            echo "::error::The native GitHub Wiki is disabled or has no initial page. Enable Wiki in repository Settings and create the first Home page; the resulting gollum event will rerun this workflow and replace it with the version-controlled pages."
-            exit 1
+            echo "::notice::Native GitHub Wiki is disabled or has no initial page. Enable Wiki in repository Settings and create the first Home page; the resulting gollum event will synchronize the version-controlled pages."
+            exit 0
           fi
 
           git init "${wiki_dir}"
