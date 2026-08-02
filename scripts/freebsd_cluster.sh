@@ -79,9 +79,12 @@ prepare_kubectl() {
     kubectl_config=""
     if [ -n "$KUBECONFIG_SOURCE" ]; then
         [ -r "$KUBECONFIG_SOURCE" ] || die "kubeconfig is not readable: $KUBECONFIG_SOURCE"
-        install -d -m 0700 "$(dirname -- "$KUBECONFIG_DEST")"
+        kubeconfig_dir=$(dirname -- "$KUBECONFIG_DEST")
+        install -d -m 0700 "$kubeconfig_dir"
         if [ "$KUBECONFIG_SOURCE" != "$KUBECONFIG_DEST" ]; then
-            install -m 0600 "$KUBECONFIG_SOURCE" "$KUBECONFIG_DEST"
+            kubeconfig_tmp=$(mktemp "${kubeconfig_dir}/.config.XXXXXX")
+            install -m 0600 "$KUBECONFIG_SOURCE" "$kubeconfig_tmp"
+            mv "$kubeconfig_tmp" "$KUBECONFIG_DEST"
         else
             chmod 0600 "$KUBECONFIG_DEST"
         fi
@@ -214,8 +217,11 @@ case "$CLUSTER_NODE_COUNT" in
 esac
 [ "$CLUSTER_NODE_COUNT" -ge 1 ] && [ "$CLUSTER_NODE_COUNT" -le 99 ] || \
     die "cluster node count must be between 1 and 99"
-case "$CLUSTER_BOOT_TIMEOUT:$CLUSTER_POLL_INTERVAL" in
-    *[!0-9:]*|0:*|*:0) die "cluster timeouts must be positive integers" ;;
+case "$CLUSTER_BOOT_TIMEOUT" in
+    ''|*[!0-9]*|0) die "CLUSTER_BOOT_TIMEOUT must be a positive integer" ;;
+esac
+case "$CLUSTER_POLL_INTERVAL" in
+    ''|*[!0-9]*|0) die "CLUSTER_POLL_INTERVAL must be a positive integer" ;;
 esac
 case "$KUBECTL_BOOTSTRAP:$KUBECTL_VERIFY" in
     yes:yes|yes:no|no:yes|no:no) ;;
@@ -242,8 +248,6 @@ case "$ACTION" in
         ;;
 esac
 
-prepare_kubectl
-
 preflight_index=1
 while [ "$preflight_index" -le "$CLUSTER_NODE_COUNT" ]; do
     preflight_name=$(node_name "$preflight_index")
@@ -253,6 +257,8 @@ while [ "$preflight_index" -le "$CLUSTER_NODE_COUNT" ]; do
     [ "$preflight_active" -eq 0 ] || die "active inventory row already exists: $preflight_name"
     preflight_index=$((preflight_index + 1))
 done
+
+prepare_kubectl
 
 created_nodes=""
 rollback_cluster() {
