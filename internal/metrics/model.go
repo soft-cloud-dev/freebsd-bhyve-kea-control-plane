@@ -32,6 +32,7 @@ type Resource struct {
 	LatestOperationAction          string
 	LatestOperationStatus          string
 	LatestOperationAttempts        int
+	LatestOperationUpdatedAt       *time.Time
 }
 
 type OperationCount struct {
