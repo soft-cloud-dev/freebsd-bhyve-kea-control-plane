@@ -23,3 +23,37 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
       - run: make verify
+      - name: Validate Grafana Alloy configuration
+        env:
+          BKCP_DB_INSTANCE: bkcp-ci
+          GCLOUD_HOSTED_METRICS_URL: https://prometheus.example.invalid/api/prom/push
+          GCLOUD_HOSTED_METRICS_ID: ci-metrics
+          GCLOUD_HOSTED_LOGS_URL: https://logs.example.invalid/loki/api/v1/push
+          GCLOUD_HOSTED_LOGS_ID: ci-logs
+          GCLOUD_RW_API_KEY: ci-token
+        run: |
+          alloy_image='grafana/alloy:v1.18.0'
+          config="$PWD/observability/grafana-cloud/postgres/config.alloy"
+          dsn="$PWD/observability/grafana-cloud/postgres/postgres.dsn.example"
+
+          docker run --rm \
+            -e BKCP_DB_INSTANCE \
+            -e GCLOUD_HOSTED_METRICS_URL \
+            -e GCLOUD_HOSTED_METRICS_ID \
+            -e GCLOUD_HOSTED_LOGS_URL \
+            -e GCLOUD_HOSTED_LOGS_ID \
+            -e GCLOUD_RW_API_KEY \
+            -v "${config}:/etc/alloy/config.alloy:ro" \
+            -v "${dsn}:/usr/local/etc/alloy/postgres.dsn:ro" \
+            "${alloy_image}" fmt --test /etc/alloy/config.alloy
+
+          docker run --rm \
+            -e BKCP_DB_INSTANCE \
+            -e GCLOUD_HOSTED_METRICS_URL \
+            -e GCLOUD_HOSTED_METRICS_ID \
+            -e GCLOUD_HOSTED_LOGS_URL \
+            -e GCLOUD_HOSTED_LOGS_ID \
+            -e GCLOUD_RW_API_KEY \
+            -v "${config}:/etc/alloy/config.alloy:ro" \
+            -v "${dsn}:/usr/local/etc/alloy/postgres.dsn:ro" \
+            "${alloy_image}" validate /etc/alloy/config.alloy
