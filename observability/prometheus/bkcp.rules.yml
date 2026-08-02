@@ -1,0 +1,56 @@
+groups:
+  - name: bkcp
+    rules:
+      - alert: BKCPExporterDown
+        expr: up{job="bkcp"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: BKCP metrics exporter is unavailable
+          description: Prometheus has been unable to scrape the BKCP exporter for more than two minutes.
+
+      - alert: BKCPExporterSnapshotFailed
+        expr: bkcp_exporter_scrape_success == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: BKCP metrics snapshot collection is failing
+          description: The exporter is reachable but cannot collect a PostgreSQL snapshot.
+
+      - alert: BKCPResourceNotConverged
+        expr: bkcp_resource_effective_state{state=~"pending|applying|degraded|drifted|blocked|deleting"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: BKCP resource is not converged
+          description: Resource {{ $labels.name }} has remained in effective state {{ $labels.state }} for more than ten minutes.
+
+      - alert: BKCPObservationUnavailable
+        expr: bkcp_resource_observation_state{state="unavailable"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: BKCP observation domain is unavailable
+          description: Resource {{ $labels.name }} cannot observe the {{ $labels.domain }} domain.
+
+      - alert: BKCPLatestOperationFailed
+        expr: bkcp_resource_latest_operation_info{status=~"failed|blocked"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: BKCP operation failed or is blocked
+          description: The latest {{ $labels.action }} operation for {{ $labels.name }} is {{ $labels.status }}.
+
+      - alert: BKCPObservationStale
+        expr: time() - bkcp_resource_last_observation_timestamp_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: BKCP observation is stale
+          description: Resource {{ $labels.name }} has not produced an observation for more than fifteen minutes.
