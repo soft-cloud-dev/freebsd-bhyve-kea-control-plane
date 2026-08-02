@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -12,8 +13,30 @@ type PostgresSource struct {
 	pool *pgxpool.Pool
 }
 
+type queryer interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
 func OpenPostgres(ctx context.Context, dsn string) (*PostgresSource, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("configure metrics PostgreSQL pool: %w", err)
+	}
+	poolConfig.ConnConfig.RuntimeParams["application_name"] = "bkcp-metrics"
+	previousAfterConnect := poolConfig.AfterConnect
+	poolConfig.AfterConnect = func(connectContext context.Context, connection *pgx.Conn) error {
+		if previousAfterConnect != nil {
+			if err := previousAfterConnect(connectContext, connection); err != nil {
+				return err
+			}
+		}
+		if _, err := connection.Exec(connectContext, `SET default_transaction_read_only = on`); err != nil {
+			return fmt.Errorf("enable read-only metrics session: %w", err)
+		}
+		return nil
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return nil, fmt.Errorf("configure metrics PostgreSQL pool: %w", err)
 	}
@@ -42,24 +65,36 @@ func (s *PostgresSource) Snapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("metrics PostgreSQL source is not initialized")
 	}
 
+	transaction, err := s.pool.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadOnly,
+	})
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("begin metrics snapshot: %w", err)
+	}
+	defer func() { _ = transaction.Rollback(ctx) }()
+
 	snapshot := Snapshot{CollectedAt: time.Now().UTC()}
-	if err := s.collectResources(ctx, &snapshot); err != nil {
+	if err := collectResources(ctx, transaction, &snapshot); err != nil {
 		return Snapshot{}, err
 	}
-	if err := s.collectOperationCounts(ctx, &snapshot); err != nil {
+	if err := collectOperationCounts(ctx, transaction, &snapshot); err != nil {
 		return Snapshot{}, err
 	}
-	if err := s.collectStepCounts(ctx, &snapshot); err != nil {
+	if err := collectStepCounts(ctx, transaction, &snapshot); err != nil {
 		return Snapshot{}, err
 	}
-	if err := s.collectAllocationCounts(ctx, &snapshot); err != nil {
+	if err := collectAllocationCounts(ctx, transaction, &snapshot); err != nil {
 		return Snapshot{}, err
+	}
+	if err := transaction.Commit(ctx); err != nil {
+		return Snapshot{}, fmt.Errorf("commit metrics snapshot: %w", err)
 	}
 	return snapshot, nil
 }
 
-func (s *PostgresSource) collectResources(ctx context.Context, snapshot *Snapshot) error {
-	rows, err := s.pool.Query(ctx, `
+func collectResources(ctx context.Context, database queryer, snapshot *Snapshot) error {
+	rows, err := database.Query(ctx, `
 SELECT r.name,
        r.managed,
        COALESCE(r.current_generation, 0),
@@ -161,8 +196,8 @@ ORDER BY r.name`)
 	return nil
 }
 
-func (s *PostgresSource) collectOperationCounts(ctx context.Context, snapshot *Snapshot) error {
-	rows, err := s.pool.Query(ctx, `
+func collectOperationCounts(ctx context.Context, database queryer, snapshot *Snapshot) error {
+	rows, err := database.Query(ctx, `
 SELECT action, status, count(*)
 FROM bkcp.operations
 GROUP BY action, status
@@ -184,8 +219,8 @@ ORDER BY action, status`)
 	return nil
 }
 
-func (s *PostgresSource) collectStepCounts(ctx context.Context, snapshot *Snapshot) error {
-	rows, err := s.pool.Query(ctx, `
+func collectStepCounts(ctx context.Context, database queryer, snapshot *Snapshot) error {
+	rows, err := database.Query(ctx, `
 SELECT driver, action, status, count(*)
 FROM bkcp.operation_steps
 GROUP BY driver, action, status
@@ -207,8 +242,8 @@ ORDER BY driver, action, status`)
 	return nil
 }
 
-func (s *PostgresSource) collectAllocationCounts(ctx context.Context, snapshot *Snapshot) error {
-	rows, err := s.pool.Query(ctx, `
+func collectAllocationCounts(ctx context.Context, database queryer, snapshot *Snapshot) error {
+	rows, err := database.Query(ctx, `
 SELECT pool_name,
        CASE WHEN released_at IS NULL THEN 'active' ELSE 'released' END,
        count(*)
