@@ -17,5 +17,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+      - name: Resolve module graph
+        run: |
+          go mod tidy
+          cat go.sum
       - run: make verify
