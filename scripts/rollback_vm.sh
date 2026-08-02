@@ -40,61 +40,46 @@ SQL
     exit 1
 }
 
-IFS='|' read -r VM_UUID MAC_ADDRESS IP_ADDRESS POOL_ID KEA_SUBNET_ID <<EOF
+IFS='|' read -r VM_UUID MAC_ADDRESS IP_ADDRESS POOL_ID KEA_SUBNET_ID <<EOF_ROW
 $row
-EOF
+EOF_ROW
 
-    delete_payload=$(jq -n \
-        --arg mac "$MAC_ADDRESS" \
-        --argjson subnet_id "$KEA_SUBNET_ID" \
-        '{
-            command:"reservation-del",
-            arguments:{
-                "subnet-id":$subnet_id,
-                "identifier-type":"hw-address",
-                identifier:$mac
-            }
-        }')
-    delete_response=$(kea_request "$delete_payload")
-    delete_result=$(printf '%s' "$delete_response" | jq -er '.[0].result')
-    if [ "$delete_result" -eq 3 ]; then
-        echo "[!] Kea reservation for ${VM_NAME} is already absent; continuing rollback" >&2
-    elif [ "$delete_result" -ne 0 ]; then
-        echo "ERROR: Kea reservation-del failed during rollback: $delete_response" >&2
-        exit 1
-    fi
+delete_payload=$(jq -n \
+    --arg mac "$MAC_ADDRESS" \
+    --argjson subnet_id "$KEA_SUBNET_ID" \
+    '{
+        command:"reservation-del",
+        arguments:{
+            "operation-target":"database",
+            "subnet-id":$subnet_id,
+            "identifier-type":"hw-address",
+            identifier:$mac
+        }
+    }')
+delete_response=$(kea_request "$delete_payload")
+delete_result=$(printf '%s' "$delete_response" | jq -er '.[0].result')
+if [ "$delete_result" -eq 3 ]; then
+    echo "[!] Kea reservation for ${VM_NAME} is already absent; continuing rollback" >&2
+elif [ "$delete_result" -ne 0 ]; then
+    echo "ERROR: Kea reservation-del failed during rollback: $delete_response" >&2
+    exit 1
+fi
 
-    lease_payload=$(jq -n \
-        --arg ip "$IP_ADDRESS" \
-        '{
-            command:"lease4-del",
-            arguments:{
-                "ip-address":$ip
-            }
-        }')
-    lease_response=$(kea_request "$lease_payload")
-    lease_result=$(printf '%s' "$lease_response" | jq -er '.[0].result')
-    if [ "$lease_result" -eq 3 ]; then
-        echo "[!] Kea lease for ${IP_ADDRESS} is already absent" >&2
-    elif [ "$lease_result" -ne 0 ]; then
-        echo "WARNING: Kea lease4-del failed during rollback: $lease_response" >&2
-    fi
-
-    if [ -w "/usr/local/etc/kea/kea-dhcp4.conf" ] || [ -f "/usr/local/etc/kea/kea-dhcp4.conf" ]; then
-        tmp_conf=$(mktemp)
-        jq --arg mac "$MAC_ADDRESS" \
-           --argjson subnet_id "$KEA_SUBNET_ID" '
-           .Dhcp4.subnet4 |= map(
-               if .id == $subnet_id then
-                   .reservations = ((.reservations // []) | map(select(.["hw-address"] != $mac)))
-               else
-                   .
-               end
-           )
-        ' /usr/local/etc/kea/kea-dhcp4.conf > "$tmp_conf" && \
-        cat "$tmp_conf" > /usr/local/etc/kea/kea-dhcp4.conf && \
-        rm -f "$tmp_conf"
-    fi
+lease_payload=$(jq -n \
+    --arg ip "$IP_ADDRESS" \
+    '{
+        command:"lease4-del",
+        arguments:{
+            "ip-address":$ip
+        }
+    }')
+lease_response=$(kea_request "$lease_payload")
+lease_result=$(printf '%s' "$lease_response" | jq -er '.[0].result')
+if [ "$lease_result" -eq 3 ]; then
+    echo "[!] Kea lease for ${IP_ADDRESS} is already absent" >&2
+elif [ "$lease_result" -ne 0 ]; then
+    echo "WARNING: Kea lease4-del failed during rollback: $lease_response" >&2
+fi
 
 if vm info "$VM_NAME" >/dev/null 2>&1; then
     vm stop "$VM_NAME" >/dev/null 2>&1 || true
