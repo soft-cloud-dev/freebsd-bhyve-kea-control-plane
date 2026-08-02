@@ -48,11 +48,14 @@ STORK_DB_PASSWORD_FILE ?= /usr/local/etc/stork/database-password
 STORK_READY_TIMEOUT ?= 60
 VM_NAME ?=
 TEMPLATE ?= freebsd
+CONTROL_PLANE_ID ?=
 FREEBSD_CLOUD_IMAGE_URL ?= https://download.freebsd.org/releases/VM-IMAGES/14.3-RELEASE/amd64/Latest/FreeBSD-14.3-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz
 FREEBSD_CLOUD_IMAGE_CACHE ?= /var/cache/control-plane/freebsd-cloud.raw
+FREEBSD_CLOUD_IMAGE_SHA256 ?=
+FREEBSD_CLOUD_IMAGE_CHECKSUM_URL ?=
 
-SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/deprovision_vm.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/migrate_vm_to_bhyveload.sh scripts/provision_freebsd_jail_cluster.sh scripts/provision_freebsd_jail_node.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
-TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh
+SCRIPTS = scripts/01_host_setup.sh scripts/02_install_dependencies.sh scripts/03_init_ipam.sh scripts/apply_pf_safely.sh scripts/configure_services.sh scripts/deprovision_vm.sh scripts/fetch_freebsd_cloud_image.sh scripts/init_kea_host_db.sh scripts/init_postgresql.sh scripts/init_stork.sh scripts/init_vm.sh scripts/install_stork.sh scripts/install_stork_agent_packages.sh scripts/lib.sh scripts/migrate_vm_to_bhyveload.sh scripts/provision_freebsd_jail_cluster.sh scripts/provision_freebsd_jail_node.sh scripts/provision_vm.sh scripts/render_kea_config.sh scripts/rollback_vm.sh scripts/start_services.sh config/rc.d/stork_server config/rc.d/stork_agent
+TESTS = tests/test_pf.sh tests/test_kea.sh tests/test_unbound.sh tests/test_observability.sh tests/test_stork.sh tests/test_cloud_image.sh
 
 .NOTPARALLEL:
 .PHONY: all help syntax lint test check-root check-platform check-trust install install-dependencies install-stork-agent-packages configure-host configure-services deprovision deprovision-vm provision-vm provision-jail-cluster fetch-cloud-image init-postgresql init-kea-host-db init-stork init-ipam init-vm start-services validate-freebsd
@@ -61,8 +64,8 @@ all help:
 	@echo "FreeBSD bhyve + Kea Control Plane"
 	@echo "Run: make install TRUSTED_SSH_READY=yes SSH_ADMIN_KEY_FILE=/root/id_ed25519.pub EXT_IF=igb0 MGMT_IF=vlan10 LAN_IF=bridge0"
 	@echo "SSH after hardening: ssh -i <private-key> ${MGMT_USER}@${MGMT_ADDR}"
-	@echo "Provision VM: make provision-vm VM_NAME=<name> SSH_PUBLIC_KEY_FILE=/root/id_ed25519.pub"
-	@echo "Provision Jail Cluster: make provision-jail-cluster SSH_PUBLIC_KEY_FILE=/root/id_ed25519.pub"
+	@echo "Provision VM: make provision-vm VM_NAME=<name> SSH_PUBLIC_KEY_FILE=/root/id_ed25519.pub CONTROL_PLANE_ID=<stable-id>"
+	@echo "Provision Jail Cluster: make provision-jail-cluster SSH_PUBLIC_KEY_FILE=/root/id_ed25519.pub CONTROL_PLANE_ID=<stable-id>"
 	@echo "Deprovision: make deprovision-vm VM_NAME=<name>"
 
 syntax:
@@ -77,6 +80,7 @@ test: lint
 	@sh tests/test_unbound.sh
 	@sh tests/test_observability.sh
 	@sh tests/test_stork.sh
+	@sh tests/test_cloud_image.sh
 
 check-root:
 	@test "$$(id -u)" -eq 0 || { echo "ERROR: run make install as root" >&2; exit 1; }
@@ -130,28 +134,14 @@ deprovision-vm:
 	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" sh scripts/deprovision_vm.sh "${VM_NAME}"
 
 fetch-cloud-image:
-	@if [ ! -f "${FREEBSD_CLOUD_IMAGE_CACHE}" ]; then \
-		echo "[+] Caching FreeBSD cloud image from ${FREEBSD_CLOUD_IMAGE_URL}..."; \
-		mkdir -p "$$(dirname "${FREEBSD_CLOUD_IMAGE_CACHE}")" 2>/dev/null || true; \
-		tmp_xz="${FREEBSD_CLOUD_IMAGE_CACHE}.xz"; \
-		if command -v curl >/dev/null 2>&1; then \
-			curl -fsSL -o "$$tmp_xz" "${FREEBSD_CLOUD_IMAGE_URL}"; \
-		elif command -v fetch >/dev/null 2>&1; then \
-			fetch -o "$$tmp_xz" "${FREEBSD_CLOUD_IMAGE_URL}"; \
-		else \
-			echo "ERROR: neither curl nor fetch is available" >&2; exit 1; \
-		fi; \
-		unxz -f "$$tmp_xz"; \
-	else \
-		echo "[+] Cloud image already cached at ${FREEBSD_CLOUD_IMAGE_CACHE}"; \
-	fi
+	@FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256}" FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL}" sh scripts/fetch_freebsd_cloud_image.sh
 
 provision-vm: fetch-cloud-image
 	@test -n "${VM_NAME}" || { echo "ERROR: set VM_NAME=<name>" >&2; exit 64; }
-	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" sh scripts/provision_vm.sh "${VM_NAME}" "${TEMPLATE}"
+	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" CONTROL_PLANE_ID="${CONTROL_PLANE_ID}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256}" FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL}" sh scripts/provision_vm.sh "${VM_NAME}" "${TEMPLATE}"
 
 provision-jail-cluster: fetch-cloud-image
-	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" sh scripts/provision_freebsd_jail_cluster.sh
+	@PGDATABASE="${PG_DATABASE}" PGUSER="${PG_USER}" CONTROL_PLANE_ID="${CONTROL_PLANE_ID}" FREEBSD_CLOUD_IMAGE_URL="${FREEBSD_CLOUD_IMAGE_URL}" FREEBSD_CLOUD_IMAGE_CACHE="${FREEBSD_CLOUD_IMAGE_CACHE}" FREEBSD_CLOUD_IMAGE_SHA256="${FREEBSD_CLOUD_IMAGE_SHA256}" FREEBSD_CLOUD_IMAGE_CHECKSUM_URL="${FREEBSD_CLOUD_IMAGE_CHECKSUM_URL}" sh scripts/provision_freebsd_jail_cluster.sh
 
 start-services:
 	@PF_ROLLBACK_TIMEOUT="${PF_ROLLBACK_TIMEOUT}" LOKI_READY_TIMEOUT="${LOKI_READY_TIMEOUT}" DNS_READY_TIMEOUT="${DNS_READY_TIMEOUT}" STORK_READY_TIMEOUT="${STORK_READY_TIMEOUT}" STORK_ENABLE="${STORK_ENABLE}" MGMT_ADDR="${MGMT_ADDR}" DNS_ADDR="${DNS_ADDR}" KEA_API_USER_FILE="${KEA_API_USER_FILE}" KEA_API_PASSWORD_FILE="${KEA_API_PASSWORD_FILE}" sh scripts/start_services.sh
@@ -162,4 +152,5 @@ validate-freebsd: lint
 	@sh tests/test_unbound.sh
 	@sh tests/test_observability.sh
 	@sh tests/test_stork.sh
+	@sh tests/test_cloud_image.sh
 	@sockstat -4 -6 -l
