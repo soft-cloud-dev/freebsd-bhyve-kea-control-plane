@@ -1,0 +1,82 @@
+package cli
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestPlanJSON(t *testing.T) {
+	dir := t.TempDir()
+	sitePath := filepath.Join(dir, "site.toml")
+	vmPath := filepath.Join(dir, "vm.toml")
+	if err := os.WriteFile(sitePath, []byte(testSite), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(vmPath, []byte(testVM), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"plan", "--config", sitePath, "--file", vmPath, "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	for _, expected := range []string{`"schema": 1`, `"command": "plan"`, `"idempotency_key"`} {
+		if !strings.Contains(stdout.String(), expected) {
+			t.Fatalf("missing %s in %s", expected, stdout.String())
+		}
+	}
+}
+
+const testSite = `
+schema = 1
+control_plane_id = "lab-01"
+[host]
+external_interface = "igb0"
+management_interface = "vlan10"
+vm_bridge = "bridge0"
+vm_dataset = "zroot/vm"
+vm_root = "/zroot/vm"
+[database]
+dsn = "host=/var/run/postgresql dbname=controlplane user=controlplane"
+[kea]
+api_url = "http://127.0.0.1:8000/"
+username_file = "/usr/local/etc/kea/user"
+password_file = "/usr/local/etc/kea/password"
+hosts_database = "kea_hosts"
+[network]
+pf_anchor = "bkcp"
+manage_anchor = true
+[[pools]]
+name = "vm-lan"
+subnet = "10.0.20.0/24"
+first_host = "10.0.20.10"
+last_host = "10.0.20.99"
+gateway = "10.0.20.1"
+dns_servers = ["10.0.20.1"]
+vlan = 20
+kea_subnet_id = 1
+[[images]]
+name = "freebsd-14.3"
+url = "https://download.freebsd.org/image.raw.xz"
+compressed_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+format = "raw.xz"
+loader = "bhyveload"
+`
+
+const testVM = `
+schema = 1
+name = "freebsd-node-01"
+owner = "admin"
+image = "freebsd-14.3"
+profile = "jail-host"
+pool = "vm-lan"
+desired_power = "running"
+cpus = 2
+memory_mb = 4096
+disk_gb = 32
+ssh_public_key_file = "/root/.ssh/id_ed25519.pub"
+`

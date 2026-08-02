@@ -1,0 +1,11 @@
+schema = 1
+name = "freebsd-node-01"
+owner = "admin"
+image = "freebsd-14.3"
+profile = "jail-host"
+pool = "vm-lan"
+desired_power = "running"
+cpus = 2
+memory_mb = 4096
+disk_gb = 32
+ssh_public_key_file = "/root/.ssh/id_ed25519.pub"
