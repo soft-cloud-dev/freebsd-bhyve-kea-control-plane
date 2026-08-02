@@ -48,6 +48,18 @@
         "manage_anchor": {"type": "boolean"}
       }
     },
+    "services": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manage": {"type": "boolean"},
+        "names": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$"}
+        }
+      }
+    },
     "pools": {
       "type": "array",
       "minItems": 1,
