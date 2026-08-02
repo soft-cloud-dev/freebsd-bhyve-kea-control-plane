@@ -9,7 +9,7 @@
 
 ## Canonical repository docs
 
-- [Implementation contract](../docs/DESIGN.md)
-- [State contract](../docs/STATE.md)
-- [Migration policy](../docs/MIGRATION.md)
-- [Canonical architecture](../docs/streamlined-v2.md)
+- [Implementation contract](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/DESIGN.md)
+- [State contract](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/STATE.md)
+- [Migration policy](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/MIGRATION.md)
+- [Canonical architecture](https://github.com/soft-cloud-dev/freebsd-bhyve-kea-control-plane/blob/main/docs/streamlined-v2.md)
