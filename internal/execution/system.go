@@ -543,8 +543,15 @@ func (d *SystemDriver) ensurePFRules(ctx context.Context, input planner.StepInpu
 	if _, err := d.Runner.Run(ctx, "pfctl", "-a", anchor, "-f", path); err != nil {
 		return Result{}, err
 	}
-	digest := sha256.Sum256([]byte(rules))
-	return Result{Postcondition: map[string]any{"anchor": anchor, "sha256": hex.EncodeToString(digest[:])}}, nil
+	present, actual, err := d.pfAnchorPresent(ctx, input)
+	if err != nil {
+		return Result{}, err
+	}
+	if !present || !strings.Contains(actual, input.Allocation.IPAddress) || !strings.Contains(actual, input.Host.VMBridge) {
+		return Result{}, fmt.Errorf("%w: PF anchor postcondition does not match resource identity", state.ErrDrift)
+	}
+	digest := sha256.Sum256([]byte(actual))
+	return Result{Postcondition: map[string]any{"anchor": anchor, "sha256": hex.EncodeToString(digest[:]), "rules": actual}}, nil
 }
 
 func (d *SystemDriver) ensurePFAbsent(ctx context.Context, input planner.StepInput) (Result, error) {
@@ -554,6 +561,13 @@ func (d *SystemDriver) ensurePFAbsent(ctx context.Context, input planner.StepInp
 	anchor := input.Network.PFAnchor + "/" + input.Resource
 	if _, err := d.Runner.Run(ctx, "pfctl", "-a", anchor, "-F", "rules"); err != nil {
 		return Result{}, err
+	}
+	present, actual, err := d.pfAnchorPresent(ctx, input)
+	if err != nil {
+		return Result{}, err
+	}
+	if present {
+		return Result{}, fmt.Errorf("%w: PF anchor still contains rules: %s", state.ErrDrift, actual)
 	}
 	return Result{Postcondition: map[string]any{"anchor": anchor, "absent": true}}, nil
 }
@@ -568,11 +582,18 @@ func (d *SystemDriver) observe(ctx context.Context, input planner.StepInput, exp
 	if errors.Is(seedErr, os.ErrNotExist) {
 		seedErr = nil
 	}
+	imageExists, imageEvidence, imageErr := d.imageVerified(input)
+	pfExists, pfEvidence, pfErr := d.pfAnchorPresent(ctx, input)
 
 	vmState := presence(vmExists, vmErr)
 	storageState := presence(storageExists, storageErr)
 	keaState := presence(keaExists, keaErr)
 	seedState := presence(seedExists, seedErr)
+	imageState := presence(imageExists, imageErr)
+	pfState := "unknown"
+	if input.Network.ManageAnchor {
+		pfState = presence(pfExists, pfErr)
+	}
 	power := "absent"
 	if vmErr != nil {
 		power = "unavailable"
@@ -586,30 +607,77 @@ func (d *SystemDriver) observe(ctx context.Context, input planner.StepInput, exp
 
 	observation := &state.Observation{
 		ObserverVersion: "cpctl-v2",
-		VMState:         vmState, StorageState: storageState, KeaState: keaState, SeedState: seedState, PowerState: power,
+		VMState:         vmState, StorageState: storageState, KeaState: keaState, SeedState: seedState,
+		ImageState: imageState, PFState: pfState, PowerState: power,
 		Observed: map[string]any{
 			"vm": input.Resource, "ip": input.Allocation.IPAddress, "mac": input.Allocation.MACAddress,
 			"kea": keaResponse, "seed_path": seedPath, "zvol": input.Allocation.ZvolName,
+			"image": imageEvidence, "pf_anchor": pfEvidence,
 		},
 	}
 
-	if unavailableErr := firstObservationError(vmErr, storageErr, keaErr, seedErr); unavailableErr != nil {
+	errorsToCheck := []error{vmErr, storageErr, keaErr, seedErr, imageErr}
+	if input.Network.ManageAnchor {
+		errorsToCheck = append(errorsToCheck, pfErr)
+	}
+	if unavailableErr := firstObservationError(errorsToCheck...); unavailableErr != nil {
 		observation.ErrorCode = "observer_unavailable"
 		observation.ErrorDetail = unavailableErr.Error()
 		return Result{Observation: observation, Postcondition: observation.Observed}, fmt.Errorf("observation unavailable: %w", unavailableErr)
 	}
 
 	if expectAbsent {
-		if vmExists || storageExists || keaExists || seedExists {
+		if vmExists || storageExists || keaExists || seedExists || (input.Network.ManageAnchor && pfExists) {
 			return Result{Observation: observation, Postcondition: observation.Observed}, fmt.Errorf("%w: delete postcondition is not absent", state.ErrDrift)
 		}
 	} else {
 		desiredRunning := input.Specification.DesiredPower == "running"
-		if !vmExists || !storageExists || !keaExists || !seedExists || running != desiredRunning {
+		pfMatches := !input.Network.ManageAnchor || (pfExists && strings.Contains(pfEvidence, input.Allocation.IPAddress) && strings.Contains(pfEvidence, input.Host.VMBridge))
+		if !vmExists || !storageExists || !keaExists || !seedExists || !imageExists || !pfMatches || running != desiredRunning {
 			return Result{Observation: observation, Postcondition: observation.Observed}, fmt.Errorf("%w: observed state does not match declaration", state.ErrDrift)
 		}
 	}
 	return Result{Observation: observation, Postcondition: observation.Observed}, nil
+}
+
+func (d *SystemDriver) imageVerified(input planner.StepInput) (bool, map[string]string, error) {
+	rawPath := filepath.Join(input.Host.VMRoot, ".bkcp", "images", input.Image.Name+".raw")
+	markerPath := rawPath + ".verified.json"
+	encoded, err := os.ReadFile(markerPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	var marker map[string]string
+	if err := json.Unmarshal(encoded, &marker); err != nil {
+		return false, nil, err
+	}
+	if marker["compressed_sha256"] != strings.ToLower(input.Image.CompressedSHA256) {
+		return false, marker, nil
+	}
+	rawDigest, err := fileSHA256(rawPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, marker, nil
+	}
+	if err != nil {
+		return false, marker, err
+	}
+	return rawDigest == marker["raw_sha256"] && rawDigest != "", marker, nil
+}
+
+func (d *SystemDriver) pfAnchorPresent(ctx context.Context, input planner.StepInput) (bool, string, error) {
+	if !input.Network.ManageAnchor {
+		return false, "", nil
+	}
+	anchor := input.Network.PFAnchor + "/" + input.Resource
+	output, err := d.Runner.Run(ctx, "pfctl", "-a", anchor, "-sr")
+	if err != nil {
+		return false, "", err
+	}
+	rules := strings.TrimSpace(string(output))
+	return rules != "", rules, nil
 }
 
 func (d *SystemDriver) zfsExists(ctx context.Context, name string) (bool, error) {
