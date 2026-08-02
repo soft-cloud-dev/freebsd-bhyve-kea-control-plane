@@ -20,6 +20,17 @@ The repository provides a stateful but non-executing `cpctl` foundation:
 
 It does **not** yet allocate addresses, download images, create storage, change Kea, change PF, or run `vm-bhyve`. The internal `PrepareApply` operation persists a plan before external execution; no public `apply` command exists yet.
 
+## Project wiki
+
+The repository-backed [project wiki](wiki/Home.md) provides the operator and contributor guide:
+
+- getting started and host prerequisites;
+- architecture and four-state semantics;
+- site and VM configuration reference;
+- PostgreSQL migrations and operation journals;
+- CLI and operational procedures;
+- development, testing, security, and roadmap.
+
 ## Build and verify
 
 ```sh
@@ -67,6 +78,7 @@ migrations/         Embedded immutable PostgreSQL migrations
 config/             V2 site and VM examples
 schemas/            Versioned JSON schemas
 docs/               Architecture, state, migration, and legacy policy
+wiki/               Operator and contributor documentation
 ```
 
 ## Design invariants
