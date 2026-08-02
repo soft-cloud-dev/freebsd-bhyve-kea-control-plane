@@ -1,7 +1,5 @@
 # Architecture
 
-## System boundary
-
 `cpctl` is a static Go control-plane CLI. It validates typed configuration, builds deterministic plans, stores durable PostgreSQL state, and will eventually coordinate narrow FreeBSD infrastructure drivers.
 
 ```text
@@ -11,107 +9,87 @@ site.toml + VM manifest
  strict decode + normalize
           |
           v
- digests + deterministic plan
+ deterministic plan + digests
           |
           v
  PostgreSQL bkcp schema
  declared | allocated | observed | effective
           |
           v
- operation + ordered step journal
+ operation + ordered-step journal
           |
           v
  future resumable executor
           |
-          +-- image cache and cloud-init
-          +-- ZFS and vm-bhyve
-          +-- Kea reservations
-          +-- PF anchor
+ image | ZFS | cloud-init | Kea | vm-bhyve | PF
 ```
 
 The current implementation stops before the executor.
 
-## State model
+## Four-state model
 
-| State | Purpose | Current behavior |
+| State | Meaning | Current status |
 |---|---|---|
-| Declared | Normalized requested intent by generation | Persisted as append-only VM specifications |
-| Allocated | Durable IP, MAC, storage, subnet, and image assignments | Schema exists; allocation is not implemented |
-| Observed | Evidence collected from external systems | Schema exists; collectors are not implemented |
-| Effective | Derived reconciliation result and reason | Initialized and exposed through inspection |
+| Declared | Normalized requested intent by generation | Implemented |
+| Allocated | Durable IP, MAC, storage, subnet, and image assignments | Schema only |
+| Observed | Evidence from authoritative external systems | Schema only |
+| Effective | Derived reconciliation result and reason | Implemented foundation |
 
-Unavailable evidence remains unknown. It is never converted into confirmed absence.
+Unavailable evidence remains unknown. It is never interpreted as confirmed absence.
 
 ## Determinism
 
-For the same normalized manifest, control-plane ID, generation, action, and ordered step contract, V2 must produce the same:
+The same normalized manifest, control-plane ID, generation, action, and ordered-step contract must produce the same:
 
 - specification digest;
 - plan digest;
 - step input digests;
 - idempotency key.
 
-Identical declared intent retains its generation. Changed intent advances the generation exactly once under a transaction-scoped resource lock.
+Identical intent retains its generation. Changed intent advances the generation exactly once under a transaction-scoped resource lock.
 
-## Persist-before-mutation contract
+## Persist before mutation
 
 The internal `PrepareApply` transaction:
 
-1. acquires the resource advisory lock;
-2. loads or creates the stable resource UUID;
-3. compares the normalized specification digest;
+1. locks the resource;
+2. loads or creates its stable UUID;
+3. compares normalized intent;
 4. retains or advances the generation;
-5. appends declared state when it changed;
+5. appends changed declared state;
 6. builds the deterministic plan;
-7. inserts or reuses the operation by idempotency key;
-8. inserts the ordered step journal once;
-9. marks effective state as pending;
+7. inserts or reuses the operation;
+8. stores ordered steps once;
+9. marks effective state pending;
 10. commits.
 
 It executes no external driver.
 
-A future executor may run only persisted steps, must verify each postcondition, and must resume from the first unverified step after interruption.
+A future executor may run only persisted steps, must verify every postcondition, and must resume from the first unverified step after interruption.
 
 ## Authority boundaries
 
-- PostgreSQL owns V2 intent, allocation records, evidence, effective state, and operation history.
-- Kea's hosts database remains authoritative for DHCP reservations.
-- ZFS and `vm-bhyve` remain authoritative for storage and VM runtime facts.
-- PF changes are restricted to the configured anchor and must not replace site policy.
-- Image artifacts require independently verified digests before promotion.
+- PostgreSQL owns V2 intent, allocations, evidence, effective state, and operation history.
+- Kea remains authoritative for DHCP reservations.
+- ZFS and `vm-bhyve` remain authoritative for storage and runtime facts.
+- PF ownership is limited to the configured anchor.
+- Images require independently verified digests before promotion.
 
-## Privilege boundary
+Planning and state handling must not become an unrestricted root shell. Future privileged work must use typed driver operations with explicit inputs and verified postconditions.
 
-Planning, decoding, and state access should not become an unrestricted root shell. Future privileged execution should use typed operations with explicit inputs and postconditions.
+## PostgreSQL objects
 
-```text
-cpctl planning and state
-          |
-          v
-typed privileged executor
-          |
- ZFS | PF | services | vm-bhyve
-```
+- `bkcp.schema_migrations` — immutable migration history;
+- `bkcp.resources` — stable identity and current generation;
+- `bkcp.vm_specs` — append-only declared intent;
+- `bkcp.vm_allocations` — durable assignments;
+- `bkcp.vm_observations` — evidence snapshots;
+- `bkcp.vm_effective` — derived state;
+- `bkcp.operations` — operation headers;
+- `bkcp.operation_steps` — ordered resumable work.
 
-Secrets, private keys, credential contents, and complete DSNs must not be persisted in plans, state, or error details.
-
-## Repository layers
-
-```text
-cmd/cpctl/                 process entry point
-internal/cli/              command parsing and output
-internal/config/           typed configuration and normalization
-internal/planner/          deterministic plan construction
-internal/migrate/          embedded migration runner
-internal/state/            state contracts and models
-internal/state/postgres/   pgx repository implementation
-internal/doctor/           read-only dependency probes
-migrations/                immutable SQL migrations
-schemas/                   versioned configuration schemas
-config/                    examples
-wiki/                      operator documentation source
-```
+Applied migrations are immutable and checksum-verified. Add a new migration version instead of editing an applied file or checksum row.
 
 ## Legacy boundary
 
-V1 is frozen on `legacy/v1-shell`. V2 does not modify legacy `public` schema objects. Future import and adoption must preserve existing names, IP addresses, MAC addresses, storage identities, and Kea reservation identities.
+V1 is frozen on `legacy/v1-shell`. V2 does not modify legacy `public` objects. Future adoption must preserve guest names, IP addresses, MAC addresses, storage identities, and Kea reservation identities.
