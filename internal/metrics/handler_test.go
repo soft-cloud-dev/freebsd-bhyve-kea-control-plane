@@ -69,6 +69,9 @@ func TestExporterRendersResourceAndJournalMetrics(t *testing.T) {
 		`bkcp_operation_steps{action="ensure-storage",driver="zfs",status="succeeded"} 2`,
 		`bkcp_allocations{pool="vm-lan",state="active"} 1`,
 	}
+	for index, expected := range checks {
+		checks[index] = strings.ReplaceAll(expected, `\"`, `"`)
+	}
 	for _, expected := range checks {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("missing %q in:\n%s", expected, body)
