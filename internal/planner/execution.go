@@ -26,6 +26,7 @@ type Allocation struct {
 
 type ExecutionHost struct {
 	VMBridge  string `json:"vm_bridge"`
+	VMSwitch  string `json:"vm_switch"`
 	VMDataset string `json:"vm_dataset"`
 	VMRoot    string `json:"vm_root"`
 }
@@ -130,10 +131,17 @@ func buildExecutable(site config.Site, generation uint64, manifest config.VMMani
 	if err != nil {
 		return ExecutablePlan{}, fmt.Errorf("digest manifest: %w", err)
 	}
+	vmSwitch := site.Host.VMSwitch
+	if vmSwitch == "" {
+		vmSwitch = site.Host.VMBridge
+	}
 	base := StepInput{
 		Schema: ExecutionInputSchemaVersion, Operation: operation, Resource: normalized.Name, Generation: generation,
 		Specification: normalized, Allocation: allocation,
-		Host:           ExecutionHost{VMBridge: site.Host.VMBridge, VMDataset: site.Host.VMDataset, VMRoot: site.Host.VMRoot},
+		Host: ExecutionHost{
+			VMBridge: site.Host.VMBridge, VMSwitch: vmSwitch,
+			VMDataset: site.Host.VMDataset, VMRoot: site.Host.VMRoot,
+		},
 		Kea:            ExecutionKea{APIURL: site.Kea.APIURL, UsernameFile: site.Kea.UsernameFile, PasswordFile: site.Kea.PasswordFile, RequestTimeoutMS: site.Kea.RequestTimeoutMS},
 		Network:        ExecutionNetwork{PFAnchor: site.Network.PFAnchor, ManageAnchor: site.Network.ManageAnchor},
 		Pool:           ExecutionPool{Gateway: pool.Gateway, DNSServers: append([]string(nil), pool.DNSServers...), VLAN: pool.VLAN},
