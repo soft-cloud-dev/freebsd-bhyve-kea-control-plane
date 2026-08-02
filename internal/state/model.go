@@ -54,6 +54,8 @@ type Observation struct {
 	StorageState    string         `json:"storage_state"`
 	KeaState        string         `json:"kea_state"`
 	SeedState       string         `json:"seed_state"`
+	ImageState      string         `json:"image_state"`
+	PFState         string         `json:"pf_state"`
 	PowerState      string         `json:"power_state"`
 	Observed        map[string]any `json:"observed"`
 	ErrorCode       string         `json:"error_code,omitempty"`
