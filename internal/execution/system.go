@@ -319,24 +319,45 @@ func (d *SystemDriver) ensureVMAbsent(ctx context.Context, input planner.StepInp
 }
 
 func (d *SystemDriver) ensureKeaReservation(ctx context.Context, input planner.StepInput) (Result, error) {
-	present, _, err := d.keaReservation(ctx, input)
+	desired := desiredKeaReservation(input)
+	present, current, err := d.keaReservation(ctx, input)
 	if err != nil {
 		return Result{}, err
 	}
-	if !present {
-		arguments := map[string]any{"operation-target": "database", "reservation": map[string]any{"subnet-id": input.Allocation.KeaSubnetID, "hw-address": input.Allocation.MACAddress, "ip-address": input.Allocation.IPAddress, "hostname": input.Resource}}
+
+	arguments := map[string]any{"operation-target": "database", "reservation": desired}
+	switch {
+	case !present:
 		if _, err := d.keaRequest(ctx, input, "reservation-add", arguments); err != nil {
 			return Result{}, err
 		}
-	}
-	present, response, err := d.keaReservation(ctx, input)
-	if err != nil || !present {
-		if err == nil {
-			err = errors.New("reservation postcondition is absent")
+	case !keaReservationMatches(current, desired):
+		if _, err := d.keaRequest(ctx, input, "reservation-update", arguments); err != nil {
+			lower := strings.ToLower(err.Error())
+			if !strings.Contains(lower, "result=2") && !strings.Contains(lower, "unsupported") && !strings.Contains(lower, "unknown command") {
+				return Result{}, err
+			}
+			deleteArguments := map[string]any{
+				"operation-target": "database", "subnet-id": input.Allocation.KeaSubnetID,
+				"identifier-type": "hw-address", "identifier": input.Allocation.MACAddress,
+			}
+			if _, err := d.keaRequest(ctx, input, "reservation-del", deleteArguments); err != nil {
+				return Result{}, err
+			}
+			if _, err := d.keaRequest(ctx, input, "reservation-add", arguments); err != nil {
+				return Result{}, err
+			}
 		}
+	}
+
+	present, current, err = d.keaReservation(ctx, input)
+	if err != nil {
 		return Result{}, err
 	}
-	return Result{Postcondition: map[string]any{"reservation": response}}, nil
+	if !present || !keaReservationMatches(current, desired) {
+		return Result{}, fmt.Errorf("%w: Kea reservation does not match allocated identity", state.ErrDrift)
+	}
+	return Result{Postcondition: map[string]any{"reservation": current}}, nil
 }
 
 func (d *SystemDriver) ensureKeaAbsent(ctx context.Context, input planner.StepInput) (Result, error) {
@@ -345,12 +366,59 @@ func (d *SystemDriver) ensureKeaAbsent(ctx context.Context, input planner.StepIn
 		return Result{}, err
 	}
 	if present {
-		arguments := map[string]any{"operation-target": "database", "subnet-id": input.Allocation.KeaSubnetID, "identifier-type": "hw-address", "identifier": input.Allocation.MACAddress}
+		arguments := map[string]any{
+			"operation-target": "database", "subnet-id": input.Allocation.KeaSubnetID,
+			"identifier-type": "hw-address", "identifier": input.Allocation.MACAddress,
+		}
 		if _, err := d.keaRequest(ctx, input, "reservation-del", arguments); err != nil {
 			return Result{}, err
 		}
 	}
+	present, _, err = d.keaReservation(ctx, input)
+	if err != nil {
+		return Result{}, err
+	}
+	if present {
+		return Result{}, fmt.Errorf("%w: Kea reservation still exists", state.ErrDrift)
+	}
 	return Result{Postcondition: map[string]any{"reservation": input.Allocation.MACAddress, "absent": true}}, nil
+}
+
+func desiredKeaReservation(input planner.StepInput) map[string]any {
+	return map[string]any{
+		"subnet-id":  input.Allocation.KeaSubnetID,
+		"hw-address": strings.ToLower(input.Allocation.MACAddress),
+		"ip-address": input.Allocation.IPAddress,
+		"hostname":   input.Resource,
+	}
+}
+
+func keaReservationMatches(current, desired map[string]any) bool {
+	currentSubnet, subnetOK := integerValue(current["subnet-id"])
+	desiredSubnet, _ := integerValue(desired["subnet-id"])
+	return subnetOK && currentSubnet == desiredSubnet &&
+		strings.EqualFold(fmt.Sprint(current["hw-address"]), fmt.Sprint(desired["hw-address"])) &&
+		fmt.Sprint(current["ip-address"]) == fmt.Sprint(desired["ip-address"]) &&
+		fmt.Sprint(current["hostname"]) == fmt.Sprint(desired["hostname"])
+}
+
+func integerValue(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int64:
+		return int(typed), true
+	case float64:
+		return int(typed), typed == float64(int(typed))
+	case json.Number:
+		parsed, err := strconv.Atoi(typed.String())
+		return parsed, err == nil
+	case string:
+		parsed, err := strconv.Atoi(typed)
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func (d *SystemDriver) ensurePFRules(ctx context.Context, input planner.StepInput) (Result, error) {
@@ -484,16 +552,36 @@ func (d *SystemDriver) vmState(ctx context.Context, name string) (bool, bool, er
 	return false, false, nil
 }
 
-func (d *SystemDriver) keaReservation(ctx context.Context, input planner.StepInput) (bool, any, error) {
-	arguments := map[string]any{"operation-target": "database", "subnet-id": input.Allocation.KeaSubnetID, "identifier-type": "hw-address", "identifier": input.Allocation.MACAddress}
+func (d *SystemDriver) keaReservation(ctx context.Context, input planner.StepInput) (bool, map[string]any, error) {
+	arguments := map[string]any{
+		"operation-target": "database", "subnet-id": input.Allocation.KeaSubnetID,
+		"identifier-type": "hw-address", "identifier": input.Allocation.MACAddress,
+	}
 	response, err := d.keaRequest(ctx, input, "reservation-get", arguments)
 	if err != nil {
-		if strings.Contains(err.Error(), "result=3") || strings.Contains(strings.ToLower(err.Error()), "not found") {
+		lower := strings.ToLower(err.Error())
+		if strings.Contains(lower, "result=3") || strings.Contains(lower, "not found") || strings.Contains(lower, "0 host") {
 			return false, nil, nil
 		}
 		return false, nil, err
 	}
-	return true, response, nil
+	top, ok := response.(map[string]any)
+	if !ok {
+		return false, nil, fmt.Errorf("invalid Kea reservation response type %T", response)
+	}
+	argumentsMap, ok := top["arguments"].(map[string]any)
+	if !ok || len(argumentsMap) == 0 {
+		return false, nil, nil
+	}
+	if nested, ok := argumentsMap["reservation"].(map[string]any); ok {
+		argumentsMap = nested
+	}
+	if _, hasMAC := argumentsMap["hw-address"]; !hasMAC {
+		if _, hasIP := argumentsMap["ip-address"]; !hasIP {
+			return false, nil, nil
+		}
+	}
+	return true, argumentsMap, nil
 }
 
 func (d *SystemDriver) keaRequest(ctx context.Context, input planner.StepInput, command string, arguments any) (any, error) {
