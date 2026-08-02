@@ -201,6 +201,6 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "  cpctl migrate [--config PATH] [--dry-run] [--json]")
 	fmt.Fprintln(w, "  cpctl status [--config PATH] [--json]")
 	fmt.Fprintln(w, "  cpctl inspect NAME [--config PATH] [--json]")
-	fmt.Fprintln(w, "  cpctl metrics [--config PATH] [--listen ADDRESS]")
+	fmt.Fprintln(w, "  cpctl metrics [--config PATH] [--dsn-file PATH] [--listen ADDRESS]")
 	fmt.Fprintln(w, "  cpctl version")
 }

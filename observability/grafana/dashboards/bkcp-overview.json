@@ -265,14 +265,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "bkcp_exporter_scrape_success",
+          "expr": "up{job=\"bkcp\"}",
           "instant": true,
           "legendFormat": "exporter",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Exporter",
+      "title": "Prometheus Target",
       "type": "stat"
     },
     {
