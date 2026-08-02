@@ -77,16 +77,7 @@ func (e Executor) Run(ctx context.Context, resourceName string) (state.Inspectio
 			_ = e.Repository.FailStep(ctx, operation.UUID, claimed.Sequence, "step_input_mismatch", detail, true)
 			return state.Inspection{}, fmt.Errorf("%w: %s", state.ErrBlocked, detail)
 		}
-		result, err := e.Driver.Ensure(ctx, input)
-		if err != nil {
-			blocked := errors.Is(err, state.ErrBlocked)
-			code := "driver_failed"
-			if blocked {
-				code = "driver_blocked"
-			}
-			_ = e.Repository.FailStep(ctx, operation.UUID, claimed.Sequence, code, err.Error(), blocked)
-			return state.Inspection{}, fmt.Errorf("step %d %s/%s: %w", claimed.Sequence, claimed.Driver, claimed.Action, err)
-		}
+		result, driverErr := e.Driver.Ensure(ctx, input)
 		if result.Observation != nil {
 			result.Observation.ResourceUUID = inspection.Resource.UUID
 			result.Observation.PlanDigest = operation.PlanDigest
@@ -94,6 +85,15 @@ func (e Executor) Run(ctx context.Context, resourceName string) (state.Inspectio
 				_ = e.Repository.FailStep(ctx, operation.UUID, claimed.Sequence, "observation_persist_failed", err.Error(), false)
 				return state.Inspection{}, err
 			}
+		}
+		if driverErr != nil {
+			blocked := errors.Is(driverErr, state.ErrBlocked)
+			code := "driver_failed"
+			if blocked {
+				code = "driver_blocked"
+			}
+			_ = e.Repository.FailStep(ctx, operation.UUID, claimed.Sequence, code, driverErr.Error(), blocked)
+			return state.Inspection{}, fmt.Errorf("step %d %s/%s: %w", claimed.Sequence, claimed.Driver, claimed.Action, driverErr)
 		}
 		postcondition := result.Postcondition
 		if postcondition == nil {
