@@ -50,6 +50,15 @@ WHERE r.name=$1 AND r.archived_at IS NULL`, name).Scan(&resourceUUID, &generatio
 	if err != nil {
 		return state.PreparedApply{}, err
 	}
+	if !created {
+		if _, err := tx.Exec(ctx, `UPDATE bkcp.operations SET status='pending',completed_at=NULL,error_code=NULL,error_detail=NULL,updated_at=CURRENT_TIMESTAMP WHERE uuid=$1 AND status <> 'running'`, operation.UUID); err != nil {
+			return state.PreparedApply{}, fmt.Errorf("reset reconcile operation: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE bkcp.operation_steps SET status='pending',started_at=NULL,completed_at=NULL,postcondition_json=NULL,postcondition_digest=NULL,error_code=NULL,error_detail=NULL WHERE operation_uuid=$1`, operation.UUID); err != nil {
+			return state.PreparedApply{}, fmt.Errorf("reset reconcile steps: %w", err)
+		}
+		operation.Status = "pending"
+	}
 	if _, err := tx.Exec(ctx, `
 INSERT INTO bkcp.vm_effective(resource_uuid,state,current_plan_digest)
 VALUES ($1,'applying',$2)
