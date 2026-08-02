@@ -23,6 +23,11 @@ request_timeout_ms = 5000
 pf_anchor = "bkcp"
 manage_anchor = true
 
+[services]
+# When enabled, V2 starts and verifies only the explicitly listed FreeBSD rc.d services.
+manage = false
+names = []
+
 [[pools]]
 name = "vm-lan"
 subnet = "10.0.20.0/24"
