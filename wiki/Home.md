@@ -15,9 +15,10 @@ V2 executes new VM lifecycles directly. It does not require `legacy/v1-shell`.
 - typed image, ZFS, cloud-init, Kea, PF, and `vm-bhyve` drivers;
 - per-resource PostgreSQL execution locks and crash resume;
 - observation-only reconciliation;
-- `doctor`, `plan`, `apply`, `reconcile`, `delete`, `migrate`, `status`, and `inspect`.
+- read-only Prometheus metrics and provisioned Grafana assets;
+- `doctor`, `plan`, `apply`, `reconcile`, `delete`, `migrate`, `status`, `inspect`, and `metrics`.
 
-The FreeBSD host remains a prerequisite. V2 does not yet install the base operating system, packages, network interfaces, PostgreSQL, Kea, or the parent PF policy.
+The FreeBSD host remains a prerequisite. V2 does not install the base operating system, packages, network interfaces, PostgreSQL, Kea, or the parent PF policy.
 
 ## Quick path
 
@@ -41,6 +42,10 @@ bin/cpctl reconcile freebsd-node-01 \
 bin/cpctl inspect freebsd-node-01 \
   --config /usr/local/etc/bkcp/site.toml \
   --json
+
+bin/cpctl metrics \
+  --config /usr/local/etc/bkcp/site.toml \
+  --dsn-file /usr/local/etc/bkcp/metrics.dsn
 ```
 
 Replace the example all-zero image digest before `apply`; it is deliberately rejected by the image driver.
@@ -51,7 +56,8 @@ Replace the example all-zero image digest before `apply`; it is deliberately rej
 2. [V2-Only Bare-Metal Three-Node Bootstrap](Bare-Metal-Three-Node-Bootstrap)
 3. [Architecture](Architecture)
 4. [CLI and Operations](CLI-and-Operations)
-5. [Development and Roadmap](Development-and-Roadmap)
+5. [Observability](Observability)
+6. [Development and Roadmap](Development-and-Roadmap)
 
 ## Fixed rules
 
@@ -62,6 +68,7 @@ Replace the example all-zero image digest before `apply`; it is deliberately rej
 - Serialize execution per resource and resume after process failure.
 - Restrict PF ownership to configured per-resource subanchors.
 - Require explicit `--destroy-storage` authorization for deletion.
+- Keep monitoring read-only and independent from lifecycle execution.
 - Allocate and manage new resources directly through V2.
 
 ## Authoritative repository documents
