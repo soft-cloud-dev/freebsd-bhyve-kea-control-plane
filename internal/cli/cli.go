@@ -36,6 +36,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "plan":
 		return runPlan(args[1:], stdout, stderr)
+	case "migrate":
+		return runMigrate(args[1:], stdout, stderr)
+	case "status":
+		return runStatus(args[1:], stdout, stderr)
+	case "inspect":
+		return runInspect(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", args[0])
 		writeUsage(stderr)
@@ -171,7 +177,7 @@ func writePlanHuman(w io.Writer, plan planner.Plan) {
 	fmt.Fprintf(w, "plan_digest: %s\n", plan.PlanDigest)
 	fmt.Fprintf(w, "idempotency_key: %s\n", plan.IdempotencyKey)
 	for _, step := range plan.Steps {
-		fmt.Fprintf(w, "%d. %s %s\n", step.Sequence, step.Driver, step.Action)
+		fmt.Fprintf(w, "%d. %s %s %s\n", step.Sequence, step.Driver, step.Action, step.InputDigest)
 	}
 }
 
@@ -181,5 +187,8 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  cpctl doctor [--config PATH] [--offline] [--json]")
 	fmt.Fprintln(w, "  cpctl plan --file VM.toml [--config PATH] [--generation N] [--json]")
+	fmt.Fprintln(w, "  cpctl migrate [--config PATH] [--dry-run] [--json]")
+	fmt.Fprintln(w, "  cpctl status [--config PATH] [--json]")
+	fmt.Fprintln(w, "  cpctl inspect NAME [--config PATH] [--json]")
 	fmt.Fprintln(w, "  cpctl version")
 }

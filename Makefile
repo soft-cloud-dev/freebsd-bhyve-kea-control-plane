@@ -6,25 +6,26 @@ CPCTL ?= ${BIN_DIR}/cpctl
 SITE ?= config/site.example.toml
 VM ?= config/vms/freebsd-node.example.toml
 
-.PHONY: all help build fmt lint test examples verify doctor clean
+.PHONY: all help build fmt lint test examples verify integration doctor clean
 
 all: verify
 
 help:
 	@echo "FreeBSD bhyve + Kea Control Plane V2"
-	@echo "make build      Build cpctl"
-	@echo "make test       Run unit tests with the race detector"
-	@echo "make lint       Run go vet"
-	@echo "make examples   Validate checked-in configuration examples"
-	@echo "make verify     Run all portable verification"
-	@echo "make doctor     Inspect a FreeBSD target without live service probes"
+	@echo "make build        Build cpctl"
+	@echo "make test         Run portable unit tests with the race detector"
+	@echo "make lint         Run go vet"
+	@echo "make examples     Validate checked-in configuration examples"
+	@echo "make verify       Run all portable verification"
+	@echo "make integration  Run PostgreSQL integration tests"
+	@echo "make doctor       Inspect a FreeBSD target without live service probes"
 
 build:
 	@mkdir -p "${BIN_DIR}"
 	${GO} build -trimpath -o "${CPCTL}" ./cmd/cpctl
 
 fmt:
-	@files="$$(gofmt -l cmd internal)"; \
+	@files="$$(gofmt -l cmd internal migrations)"; \
 	if [ -n "$$files" ]; then \
 		echo "gofmt required:" >&2; \
 		echo "$$files" >&2; \
@@ -41,6 +42,10 @@ examples: build
 	"${CPCTL}" plan --config "${SITE}" --file "${VM}" --generation 1 --json >/dev/null
 
 verify: fmt lint test examples
+
+integration:
+	@test -n "${BKCP_TEST_DATABASE_URL}" || { echo "BKCP_TEST_DATABASE_URL is required" >&2; exit 2; }
+	${GO} test -race -tags=integration ./internal/state/postgres/...
 
 doctor: build
 	"${CPCTL}" doctor --config "${SITE}" --offline

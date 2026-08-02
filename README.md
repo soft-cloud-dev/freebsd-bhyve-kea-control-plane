@@ -6,15 +6,19 @@ A declarative FreeBSD control plane for ZFS-backed `vm-bhyve` guests and Kea DHC
 
 ## Current state
 
-The repository currently provides a read-only `cpctl` foundation:
+The repository provides a stateful but non-executing `cpctl` foundation:
 
 - strict, versioned TOML configuration;
-- deterministic VM normalization;
-- stable specification, plan, and idempotency digests;
-- read-only FreeBSD, ZFS, PostgreSQL, and Kea health checks;
+- deterministic VM normalization and plan generation;
+- stable specification, plan, step-input, and idempotency digests;
+- embedded, checksummed PostgreSQL migrations;
+- separate declared, allocated, observed, and effective state under the `bkcp` schema;
+- durable operation and ordered-step journals;
+- concurrency-safe generation assignment and plan persistence;
+- read-only `doctor`, `status`, and `inspect` commands;
 - versioned JSON output and explicit exit codes.
 
-It does **not** yet mutate PostgreSQL, Kea, ZFS, PF, or `vm-bhyve`. Plan output is an execution contract, not proof that infrastructure was changed.
+It does **not** yet allocate addresses, download images, create storage, change Kea, change PF, or run `vm-bhyve`. The internal `PrepareApply` operation persists a plan before external execution; no public `apply` command exists yet.
 
 ## Build and verify
 
@@ -25,15 +29,28 @@ make build
 
 The binary is written to `bin/cpctl`.
 
-## Inspect the example configuration
+## Initialize V2 state
+
+```sh
+cp config/site.example.toml /usr/local/etc/bkcp/site.toml
+vi /usr/local/etc/bkcp/site.toml
+
+bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml --dry-run --json
+bin/cpctl migrate --config /usr/local/etc/bkcp/site.toml
+bin/cpctl status --config /usr/local/etc/bkcp/site.toml
+```
+
+Migrations are embedded in the binary, serialized by a PostgreSQL advisory lock, and recorded with SHA-256 checksums. Changing an already applied migration blocks further migration.
+
+## Inspect a deterministic plan
 
 ```sh
 bin/cpctl doctor \
-  --config config/site.example.toml \
+  --config /usr/local/etc/bkcp/site.toml \
   --offline
 
 bin/cpctl plan \
-  --config config/site.example.toml \
+  --config /usr/local/etc/bkcp/site.toml \
   --file config/vms/freebsd-node.example.toml \
   --generation 1 \
   --json
@@ -45,23 +62,25 @@ The example image digest is an all-zero validation sentinel. Replace it with the
 
 ```text
 cmd/cpctl/          CLI entry point
-internal/           Configuration, planning, probes, output contracts
+internal/           Configuration, planning, state, probes, output contracts
+migrations/         Embedded immutable PostgreSQL migrations
 config/             V2 site and VM examples
 schemas/            Versioned JSON schemas
-docs/               Architecture, migration, and legacy policy
+docs/               Architecture, state, migration, and legacy policy
 ```
 
 ## Design invariants
 
-- PostgreSQL will own declared, allocated, observed, and effective state as separate contracts.
-- Identical normalized inputs must produce identical plans and idempotency keys.
-- Unknown observations must remain distinct from confirmed absence.
-- Plans and ordered steps must be persisted before external mutation.
+- PostgreSQL owns declared, allocated, observed, and effective state as separate contracts.
+- Identical normalized inputs produce identical plans, step digests, and idempotency keys.
+- Identical declarations retain their generation; changed declarations advance it exactly once.
+- Unknown observations remain distinct from confirmed absence.
+- Plans and ordered steps are persisted before external mutation.
 - Kea's PostgreSQL hosts database remains the reservation authority.
 - PF integration must be anchor-scoped and must not replace site policy.
 - Existing V1 allocations must be adopted without changing IP or MAC addresses.
 
-See [`docs/streamlined-v2.md`](docs/streamlined-v2.md) and [`docs/DESIGN.md`](docs/DESIGN.md).
+See [`docs/streamlined-v2.md`](docs/streamlined-v2.md), [`docs/DESIGN.md`](docs/DESIGN.md), and [`docs/STATE.md`](docs/STATE.md).
 
 ## Migration and legacy
 
@@ -69,7 +88,6 @@ V1 is no longer developed on `main`. Existing V1 installations should remain pin
 
 - [`docs/MIGRATION.md`](docs/MIGRATION.md)
 - [`docs/LEGACY.md`](docs/LEGACY.md)
-- [Iteration 2 state and journal plan](../../issues/9)
 
 ## License
 
