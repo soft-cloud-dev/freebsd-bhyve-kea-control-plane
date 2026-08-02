@@ -38,18 +38,34 @@ kubectl version --client >/dev/null
 kubeconfig_dir=$(dirname -- "$KUBECONFIG_DEST")
 install -d -m 0700 "$kubeconfig_dir"
 
+stage_tmp=""
+remote_tmp=""
+cleanup() {
+    [ -z "$stage_tmp" ] || rm -f "$stage_tmp"
+    [ -z "$remote_tmp" ] || rm -f "$remote_tmp"
+}
+trap cleanup EXIT INT TERM HUP
+
+verify_kubeconfig() {
+    verify_file=$1
+    [ -s "$verify_file" ] || die "kubeconfig source is empty: $verify_file"
+    KUBECONFIG="$verify_file" kubectl config current-context >/dev/null
+    if [ "$KUBECTL_VERIFY" = yes ]; then
+        KUBECONFIG="$verify_file" kubectl cluster-info --request-timeout=10s >/dev/null
+    fi
+}
+
 install_kubeconfig() {
     input_file=$1
-    [ -s "$input_file" ] || die "kubeconfig source is empty: $input_file"
-    kubeconfig_tmp=$(mktemp "${kubeconfig_dir}/.config.XXXXXX")
-    trap 'rm -f "$kubeconfig_tmp"' EXIT INT TERM HUP
-    install -m 0600 "$input_file" "$kubeconfig_tmp"
-    mv "$kubeconfig_tmp" "$KUBECONFIG_DEST"
-    trap - EXIT INT TERM HUP
+    stage_tmp=$(mktemp "${kubeconfig_dir}/.config.XXXXXX")
+    install -m 0600 "$input_file" "$stage_tmp"
+    mv "$stage_tmp" "$KUBECONFIG_DEST"
+    stage_tmp=""
 }
 
 if [ -n "$KUBECONFIG_SOURCE" ]; then
     [ -r "$KUBECONFIG_SOURCE" ] || die "kubeconfig is not readable: $KUBECONFIG_SOURCE"
+    verify_kubeconfig "$KUBECONFIG_SOURCE"
     if [ "$KUBECONFIG_SOURCE" = "$KUBECONFIG_DEST" ]; then
         chmod 0600 "$KUBECONFIG_DEST"
     else
@@ -58,6 +74,7 @@ if [ -n "$KUBECONFIG_SOURCE" ]; then
     kubeconfig_origin=$KUBECONFIG_SOURCE
 elif [ -s "$KUBECONFIG_DEST" ] && [ "$KUBECONFIG_REFRESH" = no ]; then
     chmod 0600 "$KUBECONFIG_DEST"
+    verify_kubeconfig "$KUBECONFIG_DEST"
     kubeconfig_origin=$KUBECONFIG_DEST
 else
     case "$KUBECONFIG_REMOTE_HOST" in
@@ -86,8 +103,6 @@ else
     chmod 0600 "$KUBECONFIG_KNOWN_HOSTS"
 
     remote_tmp=$(mktemp "${kubeconfig_dir}/.remote-config.XXXXXX")
-    trap 'rm -f "$remote_tmp"' EXIT INT TERM HUP
-
     remote_command=cat
     [ "$KUBECONFIG_REMOTE_SUDO" = yes ] && remote_command='sudo -n cat'
 
@@ -111,15 +126,12 @@ else
             "$remote_command $KUBECONFIG_REMOTE_PATH" > "$remote_tmp"
     fi
 
+    verify_kubeconfig "$remote_tmp"
     install_kubeconfig "$remote_tmp"
     rm -f "$remote_tmp"
-    trap - EXIT INT TERM HUP
+    remote_tmp=""
     kubeconfig_origin="${KUBECONFIG_REMOTE_USER}@${KUBECONFIG_REMOTE_HOST}:${KUBECONFIG_REMOTE_PATH}"
 fi
 
-KUBECONFIG="$KUBECONFIG_DEST" kubectl config current-context >/dev/null
-if [ "$KUBECTL_VERIFY" = yes ]; then
-    KUBECONFIG="$KUBECONFIG_DEST" kubectl cluster-info --request-timeout=10s >/dev/null
-fi
-
+verify_kubeconfig "$KUBECONFIG_DEST"
 echo "[+] kubectl configured at ${KUBECONFIG_DEST} from ${kubeconfig_origin}"
