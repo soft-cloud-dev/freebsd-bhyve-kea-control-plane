@@ -21,6 +21,7 @@ func runMetrics(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("metrics", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", defaultSitePath, "site configuration path")
+	dsnFile := flags.String("dsn-file", "", "PostgreSQL DSN file for a read-only metrics role")
 	listenAddress := flags.String("listen", "127.0.0.1:9188", "HTTP listen address")
 	queryTimeout := flags.Duration("query-timeout", 10*time.Second, "maximum PostgreSQL snapshot duration")
 	shutdownTimeout := flags.Duration("shutdown-timeout", 10*time.Second, "graceful shutdown timeout")
@@ -39,9 +40,16 @@ func runMetrics(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return emitFailure(stdout, stderr, false, "metrics", "invalid_input", err, exitcode.InvalidInput)
 	}
+	dsn := site.Database.DSN
+	if *dsnFile != "" {
+		dsn, err = config.ReadSecret(*dsnFile)
+		if err != nil {
+			return emitFailure(stdout, stderr, false, "metrics", "invalid_input", errors.New("metrics DSN file is unreadable or empty"), exitcode.InvalidInput)
+		}
+	}
 
 	startupContext, startupCancel := context.WithTimeout(context.Background(), *queryTimeout)
-	source, err := metricsexporter.OpenPostgres(startupContext, site.Database.DSN)
+	source, err := metricsexporter.OpenPostgres(startupContext, dsn)
 	startupCancel()
 	if err != nil {
 		return emitFailure(stdout, stderr, false, "metrics", "dependency_unavailable", errors.New("PostgreSQL is unavailable"), exitcode.UnavailableDependency)
