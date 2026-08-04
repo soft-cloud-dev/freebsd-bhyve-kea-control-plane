@@ -1,0 +1,157 @@
+// Grafana Cloud FreeBSD node observability.
+// Run one Alloy process on every bare-metal host and cluster node.
+// Alloy clustering is intentionally not enabled for this host-local exporter.
+
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+prometheus.exporter.unix "freebsd_node" {
+	include_exporter_metrics = true
+	enable_collectors        = ["devstat", "netstat", "zfs"]
+
+	filesystem {
+		fs_types_exclude     = "^(devfs|fdescfs|procfs|linprocfs|tmpfs)$"
+		mount_points_exclude = "^/(dev|proc|compat/linux/proc)($|/)"
+		mount_timeout        = "5s"
+	}
+
+	textfile {
+		directory = "/var/cache/bkcp/node-exporter"
+	}
+}
+
+discovery.relabel "freebsd_node" {
+	targets = prometheus.exporter.unix.freebsd_node.targets
+
+	rule {
+		target_label = "job"
+		replacement  = "integrations/freebsd-node"
+	}
+
+	rule {
+		target_label = "instance"
+		replacement  = sys.env("FREEBSD_NODE_INSTANCE")
+	}
+
+	rule {
+		target_label = "site"
+		replacement  = sys.env("FREEBSD_NODE_SITE")
+	}
+
+	rule {
+		target_label = "rack"
+		replacement  = sys.env("FREEBSD_NODE_RACK")
+	}
+
+	rule {
+		target_label = "cluster"
+		replacement  = sys.env("FREEBSD_NODE_CLUSTER")
+	}
+
+	rule {
+		target_label = "role"
+		replacement  = sys.env("FREEBSD_NODE_ROLE")
+	}
+
+	rule {
+		target_label = "environment"
+		replacement  = sys.env("FREEBSD_NODE_ENVIRONMENT")
+	}
+
+	rule {
+		target_label = "os"
+		replacement  = "freebsd"
+	}
+
+	rule {
+		target_label = "os_version"
+		replacement  = sys.env("FREEBSD_NODE_OS_VERSION")
+	}
+
+	rule {
+		target_label = "cpu_arch"
+		replacement  = sys.env("FREEBSD_NODE_CPU_ARCH")
+	}
+
+	rule {
+		target_label = "provider"
+		replacement  = sys.env("FREEBSD_NODE_PROVIDER")
+	}
+}
+
+prometheus.scrape "freebsd_node" {
+	targets         = discovery.relabel.freebsd_node.output
+	job_name        = "integrations/freebsd-node"
+	scrape_interval = "15s"
+	scrape_timeout  = "10s"
+	forward_to      = [prometheus.remote_write.metrics_service.receiver]
+}
+
+local.file_match "freebsd_logs" {
+	path_targets = [
+		{__path__ = "/var/log/messages", log_source = "messages"},
+		{__path__ = "/var/log/security", log_source = "security"},
+		{__path__ = "/var/log/auth.log", log_source = "auth"},
+		{__path__ = "/var/log/daemon.log", log_source = "daemon"},
+		{__path__ = "/var/log/debug.log", log_source = "debug"},
+		{__path__ = "/var/log/userlog", log_source = "user"},
+		{__path__ = "/var/log/bhyve/*.log", log_source = "bhyve"},
+		{__path__ = "/var/log/jail*.log", log_source = "jail"},
+		{__path__ = "/var/log/kea/*.log", log_source = "kea"},
+		{__path__ = "/var/log/postgresql*.log", log_source = "postgresql"},
+		{__path__ = "/var/log/bkcp*.log", log_source = "bkcp"},
+	]
+}
+
+loki.source.file "freebsd_logs" {
+	targets    = local.file_match.freebsd_logs.targets
+	forward_to = [loki.process.freebsd_logs.receiver]
+}
+
+loki.process "freebsd_logs" {
+	stage.static_labels {
+		values = {
+			job         = "integrations/freebsd-node",
+			instance    = sys.env("FREEBSD_NODE_INSTANCE"),
+			site        = sys.env("FREEBSD_NODE_SITE"),
+			rack        = sys.env("FREEBSD_NODE_RACK"),
+			cluster     = sys.env("FREEBSD_NODE_CLUSTER"),
+			role        = sys.env("FREEBSD_NODE_ROLE"),
+			environment = sys.env("FREEBSD_NODE_ENVIRONMENT"),
+			os          = "freebsd",
+			os_version  = sys.env("FREEBSD_NODE_OS_VERSION"),
+			cpu_arch    = sys.env("FREEBSD_NODE_CPU_ARCH"),
+			provider    = sys.env("FREEBSD_NODE_PROVIDER"),
+		}
+	}
+
+	stage.label_drop {
+		values = ["filename"]
+	}
+
+	forward_to = [loki.write.logs_service.receiver]
+}
+
+prometheus.remote_write "metrics_service" {
+	endpoint {
+		url = sys.env("GCLOUD_HOSTED_METRICS_URL")
+
+		basic_auth {
+			username = sys.env("GCLOUD_HOSTED_METRICS_ID")
+			password = sys.env("GCLOUD_RW_API_KEY")
+		}
+	}
+}
+
+loki.write "logs_service" {
+	endpoint {
+		url = sys.env("GCLOUD_HOSTED_LOGS_URL")
+
+		basic_auth {
+			username = sys.env("GCLOUD_HOSTED_LOGS_ID")
+			password = sys.env("GCLOUD_RW_API_KEY")
+		}
+	}
+}
